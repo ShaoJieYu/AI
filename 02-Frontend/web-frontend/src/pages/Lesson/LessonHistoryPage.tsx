@@ -1,8 +1,8 @@
 import { useNavigate } from 'react-router-dom';
-import { Table, Card, Input, Select, Tag, Button, Space } from 'antd';
-import { PlusOutlined, SearchOutlined } from '@ant-design/icons';
+import { Table, Card, Input, Select, Tag, Button, Space, Popconfirm, message } from 'antd';
+import { PlusOutlined, SearchOutlined, DeleteOutlined } from '@ant-design/icons';
 import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { lessonApi } from '@/api/lesson';
 import type { LessonPlan } from '@/types/lesson';
 import { LESSON_MODE_LABELS } from '@/types/lesson';
@@ -11,6 +11,7 @@ import dayjs from 'dayjs';
 
 export default function LessonHistoryPage() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [params, setParams] = useState<ListQueryParams>({
     page: 1,
     pageSize: 10,
@@ -20,6 +21,19 @@ export default function LessonHistoryPage() {
   const { data, isLoading } = useQuery({
     queryKey: ['lessons', params],
     queryFn: () => lessonApi.getLessons(params),
+  });
+
+  // 删除备课记录的 mutation
+  const deleteMutation = useMutation({
+    mutationFn: (id: number) => lessonApi.deleteLesson(id),
+    onSuccess: () => {
+      message.success('删除成功');
+      // 删除后刷新备课历史列表
+      queryClient.invalidateQueries({ queryKey: ['lessons'] });
+    },
+    onError: (err: Error) => {
+      message.error(err.message || '删除失败');
+    },
   });
 
   const lessons = data?.data?.items || [];
@@ -90,6 +104,18 @@ export default function LessonHistoryPage() {
           >
             再备一课
           </Button>
+          <Popconfirm
+            title="确认删除"
+            description="删除后无法恢复，确定要删除这条备课记录吗？"
+            okText="删除"
+            cancelText="取消"
+            okButtonProps={{ danger: true, loading: deleteMutation.isPending }}
+            onConfirm={() => deleteMutation.mutate(record.id)}
+          >
+            <Button type="link" danger icon={<DeleteOutlined />}>
+              删除
+            </Button>
+          </Popconfirm>
         </Space>
       ),
     },

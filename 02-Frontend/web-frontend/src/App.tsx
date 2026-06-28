@@ -15,6 +15,7 @@ import HomeworkUploadPage from '@/pages/Homework/HomeworkUploadPage';
 import ResourceListPage from '@/pages/Resources/ResourceListPage';
 import ProgressTrackPage from '@/pages/Progress/ProgressTrackPage';
 import SettingsPage from '@/pages/Settings/SettingsPage';
+import AgentDemoPage from '@/pages/Agent/AgentDemoPage';
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated } = useAuthStore();
@@ -60,6 +61,8 @@ function App() {
         <Route path="/progress" element={<ProgressTrackPage />} />
 
         <Route path="/settings" element={<SettingsPage />} />
+
+        <Route path="/agent/demo" element={<AgentDemoPage />} />
       </Route>
 
       <Route path="*" element={<Navigate to="/" replace />} />
