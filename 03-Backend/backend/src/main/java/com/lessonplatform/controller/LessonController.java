@@ -4,6 +4,7 @@ import com.lessonplatform.common.PageQuery;
 import com.lessonplatform.common.PageResult;
 import com.lessonplatform.common.Result;
 import com.lessonplatform.dto.LessonGenerateRequest;
+import com.lessonplatform.dto.LessonSaveRequest;
 import com.lessonplatform.model.LessonContent;
 import com.lessonplatform.model.LessonPlan;
 import com.lessonplatform.service.LessonExportService;
@@ -64,6 +65,18 @@ public class LessonController {
     public Result<LessonPlan> generateLessonPlan(@Valid @RequestBody LessonGenerateRequest request) {
         LessonPlan lessonPlan = lessonService.generateLessonPlan(request);
         return Result.success("备课内容生成成功", lessonPlan);
+    }
+
+    /**
+     * 直接保存 Agent 已生成的五段式备课内容（不重复调 AI）。
+     *
+     * 阶段 1 Agent 链路：search_textbook → generate_lesson → save_lesson_to_history
+     * Agent 通过 AI 服务转发调用此接口，tutorId 由 JWT 鉴权自动提取。
+     */
+    @PostMapping("/save")
+    public Result<LessonPlan> saveLessonPlan(@Valid @RequestBody LessonSaveRequest request) {
+        LessonPlan lessonPlan = lessonService.saveLessonPlan(request);
+        return Result.success("Agent 备课内容已保存", lessonPlan);
     }
 
     @DeleteMapping("/{id}")

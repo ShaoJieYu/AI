@@ -6,6 +6,7 @@ import com.lessonplatform.common.BusinessException;
 import com.lessonplatform.common.PageQuery;
 import com.lessonplatform.common.PageResult;
 import com.lessonplatform.dto.LessonGenerateRequest;
+import com.lessonplatform.dto.LessonSaveRequest;
 import com.lessonplatform.model.LessonContent;
 import com.lessonplatform.model.LessonPlan;
 import com.lessonplatform.model.Student;
@@ -220,6 +221,86 @@ public class LessonService {
         if (difficulty <= 2) return "基础";
         if (difficulty >= 5) return "提高";
         return "中等";
+    }
+
+    /**
+     * 直接保存 Agent 已生成的五段式备课内容到数据库（不重复调 AI）。
+     *
+     * 场景：阶段 1 Agent 自主决策链路（search_textbook → generate_lesson → save_lesson_to_history）
+     * 已通过 AI 服务生成完整五段式内容，调用此方法直接持久化，避免重复生成。
+     *
+     * tutorId 从 SecurityContext 的 JWT 中提取（由 Controller 层鉴权保证）。
+     */
+    @Transactional
+    public LessonPlan saveLessonPlan(LessonSaveRequest request) {
+        Long tutorId = SecurityUtils.getCurrentUserId();
+
+        LessonPlan lessonPlan = new LessonPlan();
+        lessonPlan.setTutorId(tutorId);
+        lessonPlan.setSubject(request.getSubject());
+        lessonPlan.setTeachingGoal(request.getTeachingGoal());
+        lessonPlan.setDifficulty(request.getDifficulty() != null ? request.getDifficulty() : "中等");
+        lessonPlan.setEstimatedDuration(request.getDuration() != null ? String.valueOf(request.getDuration()) : "45");
+        lessonPlan.setStatus("completed");
+        lessonPlan.setGenerateType(request.getGenerateType() != null ? request.getGenerateType() : "new_lesson");
+        lessonPlan.setAiModel("qwen-plus");
+        lessonPlan.setTitle("Agent - " + request.getSubject() + "备课 - " + request.getTeachingGoal());
+
+        lessonPlanMapper.insert(lessonPlan);
+
+        int sortOrder = 1;
+
+        if (StringUtils.hasText(request.getCoreDefinition())) {
+            LessonContent content = new LessonContent();
+            content.setLessonPlanId(lessonPlan.getId());
+            content.setContentType("core_definition");
+            content.setTitle("教材核心原文");
+            content.setContent(request.getCoreDefinition());
+            content.setSortOrder(sortOrder++);
+            lessonContentMapper.insert(content);
+        }
+
+        if (StringUtils.hasText(request.getTeachingAnalysis())) {
+            LessonContent content = new LessonContent();
+            content.setLessonPlanId(lessonPlan.getId());
+            content.setContentType("teaching_analysis");
+            content.setTitle("教学深度剖析");
+            content.setContent(request.getTeachingAnalysis());
+            content.setSortOrder(sortOrder++);
+            lessonContentMapper.insert(content);
+        }
+
+        if (StringUtils.hasText(request.getMistakeWarnings())) {
+            LessonContent content = new LessonContent();
+            content.setLessonPlanId(lessonPlan.getId());
+            content.setContentType("mistake_warnings");
+            content.setTitle("易错点拨");
+            content.setContent(request.getMistakeWarnings());
+            content.setSortOrder(sortOrder++);
+            lessonContentMapper.insert(content);
+        }
+
+        if (StringUtils.hasText(request.getScoreBoosting())) {
+            LessonContent content = new LessonContent();
+            content.setLessonPlanId(lessonPlan.getId());
+            content.setContentType("score_boosting");
+            content.setTitle("提分技巧");
+            content.setContent(request.getScoreBoosting());
+            content.setSortOrder(sortOrder++);
+            lessonContentMapper.insert(content);
+        }
+
+        if (StringUtils.hasText(request.getExampleDerivation())) {
+            LessonContent content = new LessonContent();
+            content.setLessonPlanId(lessonPlan.getId());
+            content.setContentType("example_derivation");
+            content.setTitle("经典例题推导");
+            content.setContent(request.getExampleDerivation());
+            content.setSortOrder(sortOrder);
+            lessonContentMapper.insert(content);
+        }
+
+        return lessonPlan;
     }
 
     public void deleteLessonPlan(Long id) {
