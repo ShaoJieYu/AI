@@ -1,0 +1,10 @@
+{
+  "name": "mathjax-renderer",
+  "version": "1.0.0",
+  "description": "MathJax LaTeX -> SVG 子进程服务，供 Java 后端 fork 调用",
+  "type": "commonjs",
+  "private": true,
+  "dependencies": {
+    "mathjax-node": "2.1.1"
+  }
+}
