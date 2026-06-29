@@ -1,9 +1,9 @@
 # Agent 升级路线图
 
-**文档版本**: v2.3 | **更新时间**: 2026-06-29
+**文档版本**: v2.5 | **更新时间**: 2026-06-29
 
 > 📋 本文档是项目核心任务线：把"调 AI API 生成备课内容"的工具升级为真正的 AI Agent 系统
-> **当前进度**: 阶段 2（RAG）+ ✅ 阶段 1 已完成，⏳ 阶段 2 进行中（教材知识库就绪，学生记忆待实现）
+> **当前进度**: ✅ 阶段 1 + ✅ 阶段 2（RAG+记忆）+ ✅ 阶段 3（Planning）全部完成，⏳ 阶段 4（Multi-Agent）待开始
 
 ---
 
@@ -18,7 +18,7 @@
 ```
 阶段 1 (第1月)        阶段 2 (第2月)        阶段 3 (第3-4月)      阶段 4 (第5-6月)
 Function Calling  →   RAG + 记忆        →   Planning          →   Multi-Agent
-✅ 已完成              🚧 进行中              ⏳ 规划中              ⏳ 规划中
+✅ 已完成              ✅ 已完成              ✅ 已完成              ⏳ 规划中
 
 AI 自主调用工具        AI 有长期记忆和        AI 自主规划教学        多个 Agent 分工
                       知识库                路径                  协作完成复杂任务
@@ -62,13 +62,13 @@ AI 自主调用工具        AI 有长期记忆和        AI 自主规划教学 
 
 ---
 
-## 阶段 2：RAG 检索增强 + 记忆 🚧 进行中
+## 阶段 2：RAG 检索增强 + 记忆 ✅ 已完成
 
 **预计时间**: 第 2 个月
 **阶段 2a（教材知识库）已完成**: 2026-06-28
 **阶段 2b-1（学生薄弱知识点系统）已完成**: 2026-06-28
 **阶段 2b-2（Agent 短期对话记忆）已完成**: 2026-06-29
-**阶段 3（Planning）**: 待开始
+**阶段 3（Planning）已完成**: 2026-06-29
 
 ### 目标
 给 AI 注入长期记忆和知识库
@@ -106,10 +106,10 @@ AI 自主调用工具        AI 有长期记忆和        AI 自主规划教学 
 - [x] **前端聊天面板**：消息气泡 + 右侧决策轨迹面板 + 新建/删除会话
 - [x] **Redis 持久化验证**：多轮消息（user→assistant→user→assistant）完整读写
 
-### 待实现（阶段 3：Planning 自主规划）
-- [ ] **ReAct 模式**：思考→行动→观察→再思考循环
-- [ ] **Plan-and-Execute**：任务拆解与规划执行
-- [ ] **反馈循环**：基于学情反馈自主规划教学路径
+### 阶段 3（Planning 自主规划）已完成 — 详见下方阶段 3 章节
+- [x] **混合规划策略**：模板兜底 + AI 动态增减
+- [x] **逐步执行确认**：每步结果用户确认后再继续
+- [x] **重新执行机制**：用户反馈后重新执行当前步骤
 
 ### 技术选型
 | 能力 | 选型 | 理由 |
@@ -135,30 +135,61 @@ AI 自主调用工具        AI 有长期记忆和        AI 自主规划教学 
 
 ---
 
-## 阶段 3：Planning 自主规划 ⏳ 规划中
+## 阶段 3：Planning 自主规划 ✅ 已完成
 
 **预计时间**: 第 3-4 个月
+**完成时间**: 2026-06-29
 
 ### 目标
-AI 根据学生反馈自主规划备课方向和教学路径
+AI 先制定计划再逐步执行，支持用户逐步确认和重新执行，实现 Plan-and-Execute 任务拆解
 
-### 应用场景
-- 系统说"学生A三角函数连续错3题"
-- AI 自主规划"补基础 → 生成练习 → 导出 → 一周后追踪"
+### 设计决策（边推进边讲解）
+1. **交互模式选择**：每步执行后用户确认再继续（而非一次性执行完所有步骤），让用户保持控制权
+2. **重新执行机制**：方案 A — 用户输入修改意见后重新执行当前步骤，替换最后一个 step_result 卡片
+3. **规划策略选择**：混合策略 C — 固定三步模板兜底（检索教材→生成内容→保存历史）+ AI 动态增减步骤，AI 失败时自动降级到模板
 
-### 待实现
-- [ ] ReAct 模式（思考 → 行动 → 观察 → 再思考）
-- [ ] Plan-and-Execute 任务拆解
-- [ ] 反馈循环（基于学情反馈自主规划教学路径）
+### 已实现
+- [x] **混合规划器 planner.py**：BASE_LESSON_PLAN_STEPS 固定三步模板 + PLANNER_PROMPT 让 AI 在模板基础上动态增减，generate_plan(user_message) 返回 {type: "plan", plan: [...], user_message}
+- [x] **单步执行 run_agent_step**：构造 STEP_EXECUTION_PROMPT 告诉 AI"现在执行第 N 步：{step_name}"，只调用一个工具就返回 {type: "step_result", step, step_name, tool, tool_args, result, trace, success}
+- [x] **总结生成 generate_summary**：所有步骤完成后调用 AI 生成 {type: "summary", summary}
+- [x] **后端 mode 透传**：AiService.callAgent(messages, mode, extra) 重载方法，支持 plan/execute_step/summary 三种模式
+- [x] **ConversationController 改造**：sendMessage 请求体改为 Map<String,Object>，按 mode 分支构造 extra 参数，AI 回复按 type 格式化存入 Redis
+- [x] **前端三种卡片视图**：plan（计划列表+确认按钮）/ step_result（结果+进度+重新执行+确认继续）/ summary（绿色总结框）
+- [x] **前端状态管理**：currentPlan、currentStepIndex、retryInput、retrying
+- [x] **逐步确认流程**：handleSend → generatePlan → handleConfirmPlan → executeStep → handleConfirmStep → handleGenerateSummary
+- [x] **重新执行 handleRetryStep**：用户输入修改意见后重新执行当前步骤，替换最后一个 step_result 卡片
+- [x] **右侧计划进度面板**：Steps 展示当前计划执行进度
+
+### 三种响应类型
+| type | 触发时机 | 包含字段 |
+|------|----------|----------|
+| plan | mode="plan" | plan[], user_message |
+| step_result | mode="execute_step" | step, step_name, tool, tool_args, result, trace, success |
+| summary | mode="summary" | summary |
+
+### 验证结果（2026-06-29）
+用户输入"帮我准备一节物理课，主题是静电场，难度中等，时长45分钟"
+- generatePlan 返回三步计划（检索教材→生成五段式内容→保存历史）
+- executeStep 第1步：search_textbook 调用成功（物理教材未入库，返回明确提示）
+- executeStep 第2步：generate_lesson 调用成功，返回完整五段式教案（库仑定律、电场强度、例题推导）
+- generateSummary 返回完整中文总结（任务概述+每步关键结果+查看方式）
+- Redis 持久化 5 条消息，history 查询正常
+
+### 技术选型
+| 能力 | 选型 | 理由 |
+|------|------|------|
+| 规划策略 | 混合（模板+AI） | 模板保证基础流程不丢，AI 增加灵活性 |
+| 交互模式 | 逐步确认 | 用户保持控制权，每步可重新执行 |
+| 重新执行 | 替换最后卡片 | 简单可靠，保留历史轨迹 |
 
 ### 要学的概念
-- ReAct 模式
-- Plan-and-Execute
-- 任务拆解策略
-- 反馈循环设计
+- Plan-and-Execute 模式 ✅ 已掌握
+- 任务拆解策略（固定模板 + 动态增减）✅ 已掌握
+- 反馈循环设计（逐步确认 + 重新执行）✅ 已掌握
 
 ### 产出预期
-输入"学生A需要提升"，AI 自主输出教学计划并执行
+- [x] 输入备课需求，AI 自主输出三步计划并逐步执行
+- [x] 每步结果用户确认后再继续，支持重新执行
 
 ---
 

@@ -1,9 +1,9 @@
 # 项目状态总览
 
-**文档版本**: v2.3 | **更新时间**: 2026-06-29 | **维护者**: AI文档
+**文档版本**: v2.4 | **更新时间**: 2026-06-29 | **维护者**: AI文档
 
 > 📌 **新AI工程师必读！** 本文档帮助你在5分钟内理解项目当前状态和进度
-> **当前最紧要**: 阶段 2b-2（Agent 短期对话记忆）已完成部署验证
+> **当前最紧要**: 阶段 3（Planning 自主规划）已完成部署验证，下一步进入阶段 4（Multi-Agent）
 
 > ⚠️ **AI 协作规则**
 >
@@ -19,8 +19,8 @@
 
 | 项目 | 智能备课平台（大学毕业设计 → 全栈 AI Agent 工程师求职项目） |
 |-----|-----------------|
-| **现状** | Agent 阶段 2a（RAG）已完成，阶段 2b-1（薄弱点系统）已完成，阶段 2b-2（短期对话记忆）已完成 |
-| **当前阶段** | 阶段 2b-2 完成，阶段 3（Planning 自主规划）待开始 |
+| **现状** | Agent 阶段 1（Function Calling）+ 阶段 2（RAG+记忆）+ 阶段 3（Planning 自主规划）全部完成 |
+| **当前阶段** | 阶段 3 完成，阶段 4（Multi-Agent 多智能体协作）待开始 |
 | **用户身份** | 大学生，6 个月后找工作，目标全栈 AI Agent 工程师 |
 | **核心目标** | 把"调 AI API 生成备课内容"的工具升级为真正的 AI Agent 系统 |
 | **团队** | AI 驱动开发 + 用户手动测试验证 |
@@ -37,24 +37,29 @@
 | **阶段 2a** | RAG 教材知识库 | ✅ 已完成 | 2026-06-28 |
 | **阶段 2b-1** | 学生薄弱知识点系统 | ✅ 已完成 | 2026-06-28 |
 | **阶段 2b-2** | Agent 短期对话记忆（Redis 持久化 + 聊天面板） | ✅ 已完成 | 2026-06-29 |
-| **阶段 3** | Planning 自主规划 | ⏳ 规划中 | 第 3-4 个月 |
+| **阶段 3** | Planning 自主规划（混合策略 + 逐步执行确认） | ✅ 已完成 | 2026-06-29 |
 | **阶段 4** | Multi-Agent 多智能体协作 | ⏳ 规划中 | 第 5-6 个月 |
 
-### 当前要做的下一步（阶段 3 入口）
+### 当前要做的下一步（阶段 4 入口）
 
-**目标**：Planning 自主规划（ReAct 模式 + 任务拆解 + 反馈循环）
+**目标**：Multi-Agent 多智能体协作（LangGraph 工作流编排 + 4 个 Agent 分工 + 质检打回重做）
 
-**阶段 2b-2 完成内容**：
-- [x] **后端 ConversationService**：Redis 持久化会话，消息增删查 + 24h TTL 自动过期
-- [x] **后端 ConversationController**：`POST /create`、`POST /send`、`GET /history`、`DELETE /{id}`
-- [x] **后端 AiService.callAgent**：消息列表代理到 AI 服务 Agent 端点
-- [x] **AI 服务多轮对话支持**：agent_core.py 和 main.py 接受 `messages` 列表
-- [x] **前端聊天面板**：消息气泡 + 发送/加载/错误状态 + 右侧决策轨迹
-- [x] **Redis 已验证**：4 条消息完整持久化，history 查询正常
+**阶段 3 完成内容**：
+- [x] **AI 服务 planner.py**：混合规划器（固定三步模板兜底 + AI 动态增减步骤），AI 失败时自动降级到模板
+- [x] **AI 服务 agent_core.py 扩展**：新增 `run_agent_step`（单步执行）和 `generate_summary`（总结生成），保留旧 `run_agent` 向后兼容
+- [x] **AI 服务 main.py 端点改造**：AgentRequest 新增 mode/plan_step/plan 字段，支持 4 种模式路由（plan / execute_step / summary / 旧模式）
+- [x] **后端 AiService.callAgent 重载**：新增带 mode + extra 参数的方法，透传到 AI 服务
+- [x] **后端 ConversationController.sendMessage 改造**：请求体改为 Map<String,Object>，按 mode 分支处理，AI 回复按 type 格式化存入 Redis
+- [x] **前端 conversation.ts 重写**：新增 PlanStep / PlanResponse / StepResultResponse / SummaryResponse 类型 + generatePlan / executeStep / retryStep / generateSummary API
+- [x] **前端 AgentDemoPage 重写**：三种卡片视图（plan 计划列表+确认 / step_result 结果+重新执行+确认继续 / summary 绿色总结框）+ 右侧计划进度面板
+- [x] **逐步确认机制**：用户发送需求 → Agent 生成计划 → 用户确认 → 逐步执行 → 每步结果确认 → 总结
+- [x] **重新执行机制**：用户输入修改意见后重新执行当前步骤，替换最后一个 step_result 卡片
+- [x] **端到端验证通过**：plan → execute_step（2 步）→ summary 完整链路，Redis 5 条消息正确持久化
 
-**如何开始阶段 3**：
-- 查看 Phase 3 设计：project_memory.md 中"Agent 升级路线图 · 阶段 3"
-- 核心概念：ReAct 模式（思考→行动→观察→再思考）、Plan-and-Execute、反馈循环
+**如何开始阶段 4**：
+- 查看 Phase 4 设计：02-ROADMAP.md 中"阶段 4：Multi-Agent 多智能体协作"
+- 核心概念：LangGraph 工作流编排、4 个 Agent 分工（教学设计/内容生成/质检/导出）、消息传递、质检打回重做
+- 技术选型：LangGraph（Python，面试认可度高）
 
 ---
 
@@ -126,10 +131,17 @@
 
 **阶段 2b-1 已在上方列出**
 
-#### Agent 阶段 3：Planning 自主规划
-- [ ] ReAct 模式（思考 → 行动 → 观察 → 再思考）
-- [ ] Plan-and-Execute 任务拆解
-- [ ] 反馈循环（基于学情反馈自主规划教学路径）
+#### Agent 阶段 3：Planning 自主规划（2026-06-29 完成）
+- [x] **混合规划策略**：固定三步模板兜底（检索教材→生成内容→保存历史）+ AI 动态增减步骤，AI 失败时自动降级到模板
+- [x] **planner.py 模块**：generate_plan(user_message) 返回 {type: "plan", plan: [...], user_message}
+- [x] **run_agent_step 单步执行**：构造 STEP_EXECUTION_PROMPT 告诉 AI"现在执行第 N 步"，只调用一个工具就返回 {type: "step_result", ...}
+- [x] **generate_summary 总结生成**：所有步骤完成后生成 {type: "summary", summary: "..."}
+- [x] **后端 mode 透传**：AiService.callAgent(messages, mode, extra) 支持 plan/execute_step/summary 三种模式
+- [x] **ConversationController 改造**：sendMessage 按 mode 分支，AI 回复按 type 格式化存入 Redis
+- [x] **前端三种卡片视图**：plan（计划列表+确认按钮）/ step_result（结果+进度+重新执行+确认继续）/ summary（绿色总结框）
+- [x] **逐步确认机制**：用户确认计划 → 逐步执行 → 每步结果确认 → 总结
+- [x] **重新执行机制**：用户输入修改意见后重新执行当前步骤（方案 A）
+- [x] **端到端验证**：plan → execute_step × 2 → summary 完整链路通过，Redis 5 条消息正确持久化
 
 #### Agent 阶段 4：Multi-Agent 多智能体协作
 - [ ] 4 个 Agent 分工：教学设计 / 内容生成 / 质检 / 导出
@@ -201,10 +213,15 @@
 - `04-AI-Service/ai-service/agent/tool_executor.py` - search_textbook 已改为 Chroma 真实检索
 - `04-AI-Service/ai-service/agent/tools.py` - 工具定义（JSON Schema）
 - `04-AI-Service/ai-service/agent/tool_executor.py` - 工具执行器（含 token 透传）
-- `04-AI-Service/ai-service/agent/agent_core.py` - Agent Loop 决策循环
-- `04-AI-Service/ai-service/main.py` - Agent 端点 `POST /api/agent/demo`
+- `04-AI-Service/ai-service/agent/agent_core.py` - Agent Loop 决策循环（含 run_agent_step + generate_summary）
+- `04-AI-Service/ai-service/agent/planner.py` - 阶段 3 混合规划器（模板兜底 + AI 动态增减）
+- `04-AI-Service/ai-service/main.py` - Agent 端点 `POST /api/agent/demo`（支持 mode 参数路由）
 - `03-Backend/backend/src/main/java/com/lessonplatform/controller/LessonController.java` - `POST /lessons/save`
-- `02-Frontend/web-frontend/src/pages/Agent/AgentDemoPage.tsx` - Agent 测试页
+- `03-Backend/backend/src/main/java/com/lessonplatform/service/ConversationService.java` - Redis 会话管理（24h TTL）
+- `03-Backend/backend/src/main/java/com/lessonplatform/controller/ConversationController.java` - 对话端点（支持 mode 分支）
+- `03-Backend/backend/src/main/java/com/lessonplatform/service/AiService.java` - callAgent 重载（mode + extra 透传）
+- `02-Frontend/web-frontend/src/pages/Agent/AgentDemoPage.tsx` - Agent 测试页（三种卡片 + 逐步确认 + 重新执行）
+- `02-Frontend/web-frontend/src/api/conversation.ts` - 对话 API（Planning 类型 + generatePlan/executeStep/retryStep/generateSummary）
 - `02-Frontend/web-frontend/src/api/agent.ts` - Agent API 封装（独立 axios 实例）
 
 ### 排查记录
