@@ -31,24 +31,27 @@ function TypeLabel({ type, children }: { type: string; children: React.ReactNode
     thought: '思考',
     action: '行动',
     observation: '观察',
+    final_answer: '最终答案',
+    error: '错误',
   };
+  const isError = type === 'error';
   return (
     <div
       style={{
         marginBottom: 8,
         borderRadius: 6,
         overflow: 'hidden',
-        border: `1px solid ${C.border}`,
+        border: `1px solid ${isError ? '#f5c2c7' : C.border}`,
       }}
     >
       <div
         style={{
           padding: '4px 10px',
-          background: C.bg,
-          borderBottom: `1px solid ${C.border}`,
+          background: isError ? '#fff5f5' : C.bg,
+          borderBottom: `1px solid ${isError ? '#f5c2c7' : C.border}`,
           fontSize: 10,
           fontWeight: 600,
-          color: C.text3,
+          color: isError ? '#c92a2a' : C.text3,
           textTransform: 'uppercase',
           letterSpacing: 0.5,
         }}
@@ -106,11 +109,14 @@ function TraceItem({ step, index, isLast }: { step: ReActTraceStep; index: numbe
         )}
       </div>
       <div style={{ flex: 1, minWidth: 0, paddingBottom: isLast ? 0 : 12 }}>
-        {step.thought && <TypeLabel type="thought">{step.thought}</TypeLabel>}
-        {step.action && (
+        {/* 按 step.type 分支渲染单类型事件 */}
+        {step.type === 'thought' && step.content && (
+          <TypeLabel type="thought">{step.content}</TypeLabel>
+        )}
+        {step.type === 'action' && (
           <TypeLabel type="action">
-            <div style={{ fontWeight: 600, marginBottom: 4, color: C.text1 }}>{step.action}</div>
-            {step.action_input && Object.keys(step.action_input).length > 0 && (
+            <div style={{ fontWeight: 600, marginBottom: 4, color: C.text1 }}>{step.name}</div>
+            {step.input && Object.keys(step.input).length > 0 && (
               <pre
                 style={{
                   margin: 0,
@@ -123,17 +129,27 @@ function TraceItem({ step, index, isLast }: { step: ReActTraceStep; index: numbe
                   color: C.text2,
                 }}
               >
-                {JSON.stringify(step.action_input, null, 2)}
+                {JSON.stringify(step.input, null, 2)}
               </pre>
             )}
           </TypeLabel>
         )}
-        {step.observation && (
+        {step.type === 'observation' && step.content && (
           <TypeLabel type="observation">
             <div style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', maxHeight: 120, overflowY: 'auto' }}>
-              {step.observation}
+              {step.content}
             </div>
           </TypeLabel>
+        )}
+        {step.type === 'final_answer' && step.content && (
+          <TypeLabel type="final_answer">
+            <div style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', maxHeight: 160, overflowY: 'auto', color: C.text1 }}>
+              {step.content}
+            </div>
+          </TypeLabel>
+        )}
+        {step.type === 'error' && step.content && (
+          <TypeLabel type="error">{step.content}</TypeLabel>
         )}
       </div>
     </div>

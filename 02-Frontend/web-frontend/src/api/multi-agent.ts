@@ -11,11 +11,13 @@ import axiosInstance from './client';
 import type { ApiResponse } from '@/types/api';
 
 // ===== ReAct 思考过程类型 =====
+// 后端每个 step 是单类型事件（按 type 区分），不是三元组
 export interface ReActTraceStep {
-  thought: string;
-  action?: string;
-  action_input?: Record<string, unknown>;
-  observation?: string;
+  step: number;
+  type: 'thought' | 'action' | 'observation' | 'final_answer' | 'error';
+  content?: string;        // thought / observation / final_answer / error 的内容
+  name?: string;           // action 类型专有：工具名
+  input?: Record<string, unknown>;  // action 类型专有：工具参数
 }
 
 // ===== Agent 执行记录（agent_trace 数组元素） =====
