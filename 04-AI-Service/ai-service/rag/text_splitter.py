@@ -90,6 +90,7 @@ def split_pages(
     metadata: Dict,
     chunk_size: int = 500,
     chunk_overlap: int = 50,
+    unit_map: Optional[Dict[int, Dict]] = None,
 ) -> List[Dict]:
     """
     对按页提取的文本做切分，每个 chunk 带 metadata。
@@ -99,10 +100,12 @@ def split_pages(
         metadata: 全局元数据，如 {"subject": "英语", "grade": "初一", "book": "七年级下册"}
         chunk_size: chunk 最大字符数
         chunk_overlap: 重叠字符数
+        unit_map: 可选，detect_units 返回的 {page_num: {"unit": N, "unit_title": "..."}}
+                  传入后会给每个 chunk 补全 unit / unit_title 元数据
 
     Returns:
         [{"id": "...", "text": "...", "metadata": {...}}, ...]
-        metadata 包含 subject/grade/book/page/chunk_idx
+        metadata 包含 subject/grade/book/page/chunk_idx[/unit/unit_title]
     """
     all_chunks = []
     chunk_idx = 0
@@ -116,6 +119,11 @@ def split_pages(
                 "page": page["page"],
                 "chunk_idx": chunk_idx,
             }
+            # 补全 Unit 元数据（若提供 unit_map）
+            if unit_map and page["page"] in unit_map:
+                unit_info = unit_map[page["page"]]
+                chunk_meta["unit"] = unit_info["unit"]
+                chunk_meta["unit_title"] = unit_info["unit_title"]
             all_chunks.append(
                 {
                     "id": f"{metadata.get('book', 'unknown')}_p{page['page']}_c{chunk_idx}",

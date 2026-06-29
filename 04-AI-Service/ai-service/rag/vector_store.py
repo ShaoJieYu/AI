@@ -98,6 +98,7 @@ def search(
     subject: str,
     top_k: int = 5,
     min_score: float = 0.0,
+    where: Optional[Dict] = None,
 ) -> List[Dict]:
     """
     在指定学科 collection 中检索与 query 最相关的 chunk。
@@ -108,8 +109,9 @@ def search(
         query: 查询文本（如"一般过去时"）
         subject: 学科
         top_k: 返回前 k 条
-        min_score: 相似度下限（0~1），低于此值的片段会被丢弃。建议 0.65，
-                  过滤掉勉强相关的低质量结果，避免误导 LLM。
+        min_score: 相似度下限（0~1），低于此值的片段会被丢弃。建议 0.40，
+                  过滤掉勉强相关的低质量结果。
+        where: Chroma metadata 过滤条件，如 {"unit": 6} 只在 Unit 6 范围内检索
 
     Returns:
         [{"text": "...", "metadata": {...}, "score": 0.87}, ...]
@@ -130,11 +132,14 @@ def search(
 
     # 多取一些再用 min_score 过滤，避免过滤后剩余条数过少
     fetch_k = min(top_k * 2, col.count())
-    results = col.query(
-        query_embeddings=[query_vec],
-        n_results=fetch_k,
-        include=["documents", "metadatas", "distances"],
-    )
+    query_kwargs = {
+        "query_embeddings": [query_vec],
+        "n_results": fetch_k,
+        "include": ["documents", "metadatas", "distances"],
+    }
+    if where:
+        query_kwargs["where"] = where
+    results = col.query(**query_kwargs)
 
     docs = results.get("documents", [[]])[0]
     metas = results.get("metadatas", [[]])[0]
@@ -151,7 +156,13 @@ def search(
     return output
 
 
-def search_as_text(query: str, subject: str, top_k: int = 5, min_score: float = 0.0) -> str:
+def search_as_text(
+    query: str,
+    subject: str,
+    top_k: int = 5,
+    min_score: float = 0.0,
+    where: Optional[Dict] = None,
+) -> str:
     """
     检索并把结果格式化成字符串（供 search_textbook 工具直接返回给大模型）。
 
@@ -160,8 +171,9 @@ def search_as_text(query: str, subject: str, top_k: int = 5, min_score: float = 
         subject: 学科（中文）
         top_k: 返回前 k 条
         min_score: 相似度下限，低于此值的片段会被丢弃
+        where: Chroma metadata 过滤条件，如 {"unit": 6}
     """
-    results = search(query, subject, top_k, min_score)
+    results = search(query, subject, top_k, min_score, where=where)
     if not results:
         return (
             f"【教材检索结果：{subject} - {query}】\n"
@@ -176,7 +188,12 @@ def search_as_text(query: str, subject: str, top_k: int = 5, min_score: float = 
         meta = r["metadata"]
         book = meta.get("book", "未知教材")
         page = meta.get("page", "?")
-        lines.append(f"[片段 {i}] 相似度 {r['score']} | {book} 第 {page} 页")
+        unit = meta.get("unit")
+        unit_title = meta.get("unit_title", "")
+        if unit:
+            lines.append(f"[片段 {i}] 相似度 {r['score']} | {book} 第 {page} 页 | Unit {unit} {unit_title}")
+        else:
+            lines.append(f"[片段 {i}] 相似度 {r['score']} | {book} 第 {page} 页")
         lines.append(f"原文：{r['text']}")
         lines.append("")
     return "\n".join(lines).strip()

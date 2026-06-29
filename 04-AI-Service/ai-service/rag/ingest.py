@@ -28,6 +28,7 @@ from rag.pdf_extractor import extract_pdf
 from rag.text_splitter import split_pages
 from rag.embedder import embed_texts
 from rag.vector_store import add_chunks_with_embeddings, get_stats
+from rag.unit_detector import detect_units
 
 
 def ingest(pdf_path: str, subject: str, grade: str, book: str,
@@ -41,20 +42,35 @@ def ingest(pdf_path: str, subject: str, grade: str, book: str,
     if not os.path.exists(pdf_path):
         raise FileNotFoundError(f"PDF 文件不存在: {pdf_path}")
 
-    print(f"[1/4] 提取 PDF: {pdf_path}")
+    print(f"[1/5] 提取 PDF: {pdf_path}")
     pages = extract_pdf(pdf_path)
     print(f"      提取到 {len(pages)} 页有效内容")
 
-    print(f"[2/4] 切分文本 (chunk_size={chunk_size}, overlap={chunk_overlap})")
+    print(f"[2/5] 检测 Unit 边界")
+    unit_map = detect_units(pages, book=book)
+    print(f"      识别到 {len(unit_map)} 页归属某个 Unit")
+    if unit_map:
+        # 按 Unit 分组统计
+        units_summary = {}
+        for info in unit_map.values():
+            key = (info["unit"], info["unit_title"])
+            units_summary[key] = units_summary.get(key, 0) + 1
+        for (unit_num, title), cnt in sorted(units_summary.items()):
+            print(f"      Unit {unit_num} - {title}: {cnt} 页")
+
+    print(f"[3/5] 切分文本 (chunk_size={chunk_size}, overlap={chunk_overlap})")
     metadata = {"subject": subject, "grade": grade, "book": book}
-    chunks = split_pages(pages, metadata, chunk_size, chunk_overlap)
+    chunks = split_pages(pages, metadata, chunk_size, chunk_overlap, unit_map=unit_map)
     print(f"      切出 {len(chunks)} 个 chunk")
+    # 统计带 Unit 元数据的 chunk 数
+    chunks_with_unit = sum(1 for c in chunks if "unit" in c["metadata"])
+    print(f"      其中 {chunks_with_unit} 个 chunk 带 Unit 元数据")
 
     if not chunks:
         print("      警告：没有切出任何 chunk，可能是 PDF 内容为空")
         return {"pages": len(pages), "chunks": 0, "subject": subject, "book": book}
 
-    print(f"[3/4] 通义千问 text-embedding-v2 向量化 (共 {len(chunks)} 条)...")
+    print(f"[4/5] 通义千问 text-embedding-v2 向量化 (共 {len(chunks)} 条)...")
     texts = [c["text"] for c in chunks]
     embeddings = embed_texts(texts)
     print(f"      生成 {len(embeddings)} 个向量，维度 {len(embeddings[0]) if embeddings else 0}")
@@ -64,7 +80,7 @@ def ingest(pdf_path: str, subject: str, grade: str, book: str,
             f"向量化数量不匹配: {len(chunks)} chunks vs {len(embeddings)} embeddings"
         )
 
-    print(f"[4/4] 写入 Chroma (subject={subject})")
+    print(f"[5/5] 写入 Chroma (subject={subject})")
     count = add_chunks_with_embeddings(chunks, embeddings, subject)
     print(f"      写入 {count} 条记录")
 
