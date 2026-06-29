@@ -43,12 +43,35 @@ _CN_NUM_MAP = {
 }
 
 
+# ============================================================
+# 主题词 → 章号映射（教材章标题主题词兜底）
+# ============================================================
+# 当用户输入里没有 "Unit N" / "第N章" 等显式编号时，
+# 通过主题词识别所属章节。每本教材按学科独立维护。
+#
+# 设计原因：LLM 难以稳定传递 unit 参数（项目记忆记录的经验），
+# 用户输入也常常只说主题（"圆周运动"）不说章节号，
+# 主题词映射是确保 100% 命中 unit 的最后一道兜底。
+#
+# 维护方式：每入库一本新教材，在该教材的章节边界检测通过后，
+# 将章节标题中的核心主题词加入此表。
+TOPIC_TO_UNIT = {
+    # 人教版物理必修第二册（4 章）
+    "抛体运动": 5, "平抛": 5, "斜抛": 5, "平抛运动": 5, "曲线运动": 5,
+    "圆周运动": 6, "匀速圆周": 6, "向心力": 6, "向心加速度": 6, "线速度": 6, "角速度": 6,
+    "万有引力": 7, "引力定律": 7, "行星运动": 7, "卫星": 7, "开普勒": 7,
+    "机械能": 8, "动能定理": 8, "势能": 8, "能量守恒": 8, "动能": 8, "功": 8,
+}
+
+
 def extract_unit_from_text(text: str):
     """
     从字符串中提取 Unit 编号（程序化兜底）。
 
-    支持 "Unit 6"、"第 6 单元"、"第 6 章"、"第三章"、"unit": 6（JSON 字段）等模式。
-    按优先级匹配：JSON 字段 > Unit > 单元（数字）> 章（数字）> 单元（中文）> 章（中文）。
+    支持三种识别模式，按优先级匹配：
+    1. 显式编号模式："Unit 6"、"第 6 单元"、"第 6 章"、"第三章"、"unit": 6（JSON 字段）
+    2. 主题词映射：用户输入提到"圆周运动"等主题词时，返回对应章号
+       （用于用户只说主题不说章节号的场景）
 
     Args:
         text: 待提取的字符串（如用户需求或教学设计 JSON）
@@ -58,6 +81,8 @@ def extract_unit_from_text(text: str):
     """
     if not text:
         return None
+
+    # 优先级 1：显式编号模式（Unit N / 第N章 / JSON "unit": N）
     for pattern in _UNIT_PATTERNS:
         m = pattern.search(text)
         if not m:
@@ -73,6 +98,14 @@ def extract_unit_from_text(text: str):
                 continue
         if 1 <= unit <= 30:  # 合理范围校验，避免误匹配日期/页码
             return unit
+
+    # 优先级 2：主题词映射（用户只说主题"圆周运动"不说章节号时的兜底）
+    # 按主题词长度倒序匹配，优先匹配更具体的关键词
+    # （如"平抛运动"优先于"平抛"，避免短词误命中）
+    for topic in sorted(TOPIC_TO_UNIT.keys(), key=len, reverse=True):
+        if topic in text:
+            return TOPIC_TO_UNIT[topic]
+
     return None
 
 
@@ -208,11 +241,17 @@ def execute_multi_agent_tool(name: str, arguments: dict, token: str = None,
     返回：
         工具执行结果字符串
     """
-    # 程序化兜底：search_textbook 未传 unit 但有 unit_hint，自动补上
+    # 程序化兜底：search_textbook 的 unit 参数强制使用 unit_hint
+    # 用户输入是最可靠的信号，LLM 可能传错 unit（如把第六章写成 Unit 5）
+    # 所以：LLM 没传 unit → 注入 unit_hint；LLM 传了但和 unit_hint 冲突 → 覆盖
     if name == "search_textbook" and unit_hint is not None:
-        if arguments.get("unit") is None:
+        old_unit = arguments.get("unit")
+        if old_unit != unit_hint:
             arguments["unit"] = unit_hint
-            print(f"[工具兜底] search_textbook 未传 unit，自动注入 unit={unit_hint}")
+            if old_unit is None:
+                print(f"[工具兜底] search_textbook 未传 unit，自动注入 unit={unit_hint}")
+            else:
+                print(f"[工具兜底] search_textbook unit={old_unit} 与用户输入 unit_hint={unit_hint} 冲突，强制覆盖")
 
     func = MULTI_AGENT_TOOL_REGISTRY.get(name)
     if not func:

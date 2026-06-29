@@ -65,14 +65,13 @@ class ReActLoop:
         # 重置 trace（每次 run 都是独立的）
         self.trace = []
 
-        # 程序化兜底：从 user_input + context 提取 Unit 编号
-        # 防止 LLM 漏传 unit 参数导致检索到前言/目录等无关内容
-        combined_text = user_input or ""
-        if context:
-            combined_text = f"{combined_text}\n{context}"
-        self.unit_hint = extract_unit_from_text(combined_text)
+        # 程序化兜底：从 user_input 提取 Unit 编号
+        # 只从用户原始输入提取，不从 context（教学设计 JSON）提取
+        # 因为教学设计 Agent 可能输出错误的 unit 字段（LLM 不可靠）
+        # 用户输入是最可靠的信号（用户自己知道想备哪节课）
+        self.unit_hint = extract_unit_from_text(user_input or "")
         if self.unit_hint:
-            print(f"[ReAct 兜底] 从输入提取到 Unit={self.unit_hint}，将用于 search_textbook 自动注入")
+            print(f"[ReAct 兜底] 从用户输入提取到 Unit={self.unit_hint}，将用于 search_textbook 强制注入")
 
         # 构造初始消息列表
         messages = [
@@ -151,18 +150,24 @@ class ReActLoop:
                 except json.JSONDecodeError:
                     func_args = {}
 
-                # 记录 Action
+                # 记录 Action（记录 LLM 原始调用参数）
                 self.trace.append({
                     "step": i + 1,
                     "type": "action",
                     "name": func_name,
-                    "input": func_args,
+                    "input": dict(func_args),  # 显式复制，避免后续修改污染
                 })
 
-                # 执行工具（传入 unit_hint 用于 search_textbook 自动兜底）
+                # 执行工具（传入 unit_hint 用于 search_textbook 强制覆盖）
+                # execute_multi_agent_tool 会 in-place 修改 func_args（覆盖/注入 unit）
                 result = execute_multi_agent_tool(
                     func_name, func_args, token=self.token, unit_hint=self.unit_hint
                 )
+
+                # 工具执行后，如果 func_args 的 unit 被修改了（兜底注入或冲突覆盖），
+                # 更新 trace 里的 input，让前端看到实际传给工具的最终参数
+                if func_args.get("unit") != self.trace[-1]["input"].get("unit"):
+                    self.trace[-1]["input"]["unit"] = func_args.get("unit")
 
                 # 记录 Observation
                 self.trace.append({
