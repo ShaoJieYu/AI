@@ -9,7 +9,7 @@
  * 工作流：3 个 Agent（教学设计 → 内容生成 → 质检）协作完成备课
  * 工作流完成后自动保存到备课历史，用户在备课历史详情页点导出按钮导出 PDF
  */
-import { useState, useRef, useCallback, useEffect } from 'react';
+import { useRef, useCallback, useEffect } from 'react';
 import {
   Card, Input, Button, Typography, Alert, Empty, Spin, Tag,
   Divider, Tabs, Select, message,
@@ -19,12 +19,13 @@ import {
   ApiFilled, BulbFilled,
 } from '@ant-design/icons';
 import { useAuthStore } from '@/stores/authStore';
+import { useMultiAgentStore } from '@/stores/multiAgentStore';
 import {
   multiAgentApi, AGENT_ORDER, AGENT_META,
-  type AgentTraceEntry, type TeachingDesign, type ContentDraft,
+  type TeachingDesign, type ContentDraft,
   type QaResult, type ReActTraceStep,
 } from '@/api/multi-agent';
-import AgentTopology, { type NodeStatus } from './components/AgentTopology';
+import AgentTopology from './components/AgentTopology';
 import AgentCard from './components/AgentCard';
 import ReactTraceViewer from './components/ReactTraceViewer';
 import QaRadarChart from './components/QaRadarChart';
@@ -48,37 +49,6 @@ const C = {
   warn: '#e37400',
 };
 
-// ===== 状态类型 =====
-interface PageState {
-  teachingDesign: TeachingDesign | null;
-  contentDraft: ContentDraft | null;
-  qaResult: QaResult | null;
-  retryCount: number;
-  rejectTarget: string | null;
-  agentTraces: Record<string, AgentTraceEntry>;
-  agentStatuses: Record<string, NodeStatus>;
-  lessonSaved: boolean;
-  lessonId: number | null;
-  lessonSaveMessage: string;
-}
-
-const INITIAL_STATE: PageState = {
-  teachingDesign: null,
-  contentDraft: null,
-  qaResult: null,
-  retryCount: 0,
-  rejectTarget: null,
-  agentTraces: {},
-  agentStatuses: {
-    teaching_design: 'pending',
-    content_generation: 'pending',
-    qa: 'pending',
-  },
-  lessonSaved: false,
-  lessonId: null,
-  lessonSaveMessage: '',
-};
-
 const FIVE_SECTIONS: Array<{ key: keyof ContentDraft; label: string }> = [
   { key: 'coreDefinition', label: '教材核心原文' },
   { key: 'teachingAnalysis', label: '教学深度剖析' },
@@ -89,18 +59,80 @@ const FIVE_SECTIONS: Array<{ key: keyof ContentDraft; label: string }> = [
 
 // ===== 主页面 =====
 export default function MultiAgentPage() {
-  const [userRequest, setUserRequest] = useState('初二物理牛顿第二定律备课，45分钟，重点讲清 F=ma 的物理意义和单位换算');
-  const [useFullWorkflow, setUseFullWorkflow] = useState(true);
-  const [running, setRunning] = useState(false);
-  const [state, setState] = useState<PageState>(INITIAL_STATE);
-  const [activeAgent, setActiveAgent] = useState<string>('teaching_design');
-  const [error, setError] = useState('');
+  // 全部状态来自全局 store，组件卸载也不丢失
+  const {
+    userRequest, useFullWorkflow, running, error, activeAgent,
+    teachingDesign, contentDraft, qaResult, retryCount, rejectTarget,
+    agentTraces, agentStatuses, lessonSaved, lessonId, lessonSaveMessage,
+    setUserRequest, setUseFullWorkflow,
+    setError, setActiveAgent,
+    resetWorkflow, onAgentStart, onAgentComplete, onQaReject,
+    onLessonSaved, onWorkflowComplete, onAgentError,
+  } = useMultiAgentStore();
 
   const eventSourceRef = useRef<EventSource | null>(null);
 
   const genSessionId = useCallback(() => {
     return `ma_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
   }, []);
+
+  // ===== 处理 SSE 事件（提前定义，handleRun 和 onmessage 都要用） =====
+  const handleEvent = useCallback((event: { type: string; [k: string]: unknown }) => {
+    switch (event.type) {
+      case 'agent_start': {
+        onAgentStart(event.agent as string);
+        break;
+      }
+      case 'agent_complete': {
+        onAgentComplete({
+          agent: event.agent as string,
+          react_trace: (event.react_trace as ReActTraceStep[]) || [],
+          output_summary: (event.output_summary as string) || '',
+          timestamp: (event.timestamp as string) || '',
+          retry_attempt: (event.retry_attempt as number) || 0,
+          retry_count: event.retry_count as number | undefined,
+          teaching_design: event.teaching_design as TeachingDesign | undefined,
+          content_draft: event.content_draft as ContentDraft | undefined,
+          qa_result: event.qa_result as QaResult | undefined,
+        });
+        break;
+      }
+      case 'qa_reject': {
+        const routeTo = event.route_to as string;
+        const retryCount = (event.retry_count as number) || 0;
+        onQaReject(routeTo, retryCount);
+        break;
+      }
+      case 'lesson_saved': {
+        const success = event.success as boolean;
+        const msg = (event.message as string) || '';
+        const lid = (event.lesson_id as number | null) ?? null;
+        if (success) {
+          message.success('已自动保存到备课历史，可在"备课历史"页面查看并导出 PDF');
+        } else {
+          message.warning('保存到备课历史失败：' + msg);
+        }
+        onLessonSaved(success, msg, lid);
+        break;
+      }
+      case 'workflow_complete': {
+        onWorkflowComplete();
+        eventSourceRef.current?.close();
+        break;
+      }
+      case 'agent_error': {
+        const errMsg = (event.error as string) || '未知错误';
+        onAgentError(errMsg);
+        eventSourceRef.current?.close();
+        break;
+      }
+      default:
+        break;
+    }
+  }, [
+    onAgentStart, onAgentComplete, onQaReject,
+    onLessonSaved, onWorkflowComplete, onAgentError,
+  ]);
 
   // ===== 启动 SSE =====
   const handleRun = useCallback(() => {
@@ -110,13 +142,11 @@ export default function MultiAgentPage() {
     }
     if (running) return;
 
-    setError('');
-    setState(INITIAL_STATE);
+    // 重置工作流结果（保留输入草稿）
+    resetWorkflow();
     setActiveAgent('teaching_design');
-    setRunning(true);
 
     const sid = genSessionId();
-
     const token = useAuthStore.getState().accessToken;
 
     const es = multiAgentApi.connectSSE({
@@ -138,106 +168,23 @@ export default function MultiAgentPage() {
 
     es.onerror = () => {
       if (es.readyState === EventSource.CLOSED) {
-        setRunning(false);
+        onWorkflowComplete();
       } else {
         setError('SSE 连接异常，请检查后端服务');
-        setRunning(false);
+        onWorkflowComplete();
       }
     };
-  }, [userRequest, useFullWorkflow, running, genSessionId]);
-
-  // ===== 处理 SSE 事件 =====
-  const handleEvent = useCallback((event: { type: string; [k: string]: unknown }) => {
-    switch (event.type) {
-      case 'agent_start': {
-        const agent = event.agent as string;
-        setState((s) => ({
-          ...s,
-          agentStatuses: { ...s.agentStatuses, [agent]: 'running' },
-        }));
-        setActiveAgent(agent);
-        break;
-      }
-      case 'agent_complete': {
-        const agent = event.agent as string;
-        const reactTrace = (event.react_trace as ReActTraceStep[]) || [];
-        const outputSummary = (event.output_summary as string) || '';
-
-        const traceEntry: AgentTraceEntry = {
-          agent,
-          node: agent,
-          input_summary: '',
-          output_summary: outputSummary,
-          react_trace: reactTrace,
-          duration_ms: 0,
-          timestamp: (event.timestamp as string) || '',
-          template_used: false,
-          retry_attempt: (event.retry_attempt as number) || 0,
-        };
-
-        setState((s) => {
-          const update: Partial<PageState> = {
-            agentStatuses: { ...s.agentStatuses, [agent]: 'done' },
-            agentTraces: { ...s.agentTraces, [agent]: traceEntry },
-            retryCount: (event.retry_count as number) ?? s.retryCount,
-          };
-          if (event.teaching_design) update.teachingDesign = event.teaching_design as TeachingDesign;
-          if (event.content_draft) update.contentDraft = event.content_draft as ContentDraft;
-          if (event.qa_result) update.qaResult = event.qa_result as QaResult;
-          return { ...s, ...update };
-        });
-        break;
-      }
-      case 'qa_reject': {
-        const routeTo = event.route_to as string;
-        const retryCount = (event.retry_count as number) || 0;
-        setState((s) => ({
-          ...s,
-          rejectTarget: routeTo,
-          retryCount,
-        }));
-        break;
-      }
-      case 'lesson_saved': {
-        const success = event.success as boolean;
-        const msg = (event.message as string) || '';
-        const lessonId = (event.lesson_id as number | null) ?? null;
-        if (success) {
-          message.success('已自动保存到备课历史，可在"备课历史"页面查看并导出 PDF');
-        } else {
-          message.warning('保存到备课历史失败：' + msg);
-        }
-        setState((s) => ({
-          ...s,
-          lessonSaved: success,
-          lessonId,
-          lessonSaveMessage: msg,
-        }));
-        break;
-      }
-      case 'workflow_complete': {
-        setState((s) => ({ ...s, rejectTarget: null }));
-        setRunning(false);
-        eventSourceRef.current?.close();
-        break;
-      }
-      case 'agent_error': {
-        const errMsg = (event.error as string) || '未知错误';
-        setError(errMsg);
-        setRunning(false);
-        eventSourceRef.current?.close();
-        break;
-      }
-      default:
-        break;
-    }
-  }, []);
+  }, [
+    userRequest, useFullWorkflow, running, genSessionId,
+    resetWorkflow, setActiveAgent, setError, handleEvent, onWorkflowComplete,
+  ]);
 
   const handleStop = useCallback(() => {
     eventSourceRef.current?.close();
-    setRunning(false);
-  }, []);
+    onWorkflowComplete();
+  }, [onWorkflowComplete]);
 
+  // 组件卸载时关闭 SSE（但不清空 store，下次回来还在）
   useEffect(() => {
     return () => {
       eventSourceRef.current?.close();
@@ -246,25 +193,25 @@ export default function MultiAgentPage() {
 
   // ===== 中栏：产出内容 =====
   const renderContent = () => {
-    if (state.teachingDesign || state.contentDraft) {
+    if (teachingDesign || contentDraft) {
       return (
         <Tabs
           defaultActiveKey="design"
           items={[
-            state.teachingDesign && {
+            teachingDesign && {
               key: 'design',
               label: '教学设计',
-              children: <TeachingDesignView design={state.teachingDesign} />,
+              children: <TeachingDesignView design={teachingDesign} />,
             },
-            state.contentDraft && {
+            contentDraft && {
               key: 'content',
               label: '五段式内容',
-              children: <ContentDraftView draft={state.contentDraft} />,
+              children: <ContentDraftView draft={contentDraft} />,
             },
-            state.lessonSaved || state.lessonSaveMessage ? {
+            lessonSaved || lessonSaveMessage ? {
               key: 'saved',
               label: '保存状态',
-              children: <SaveStatusView saved={state.lessonSaved} lessonId={state.lessonId} message={state.lessonSaveMessage} />,
+              children: <SaveStatusView saved={lessonSaved} lessonId={lessonId} message={lessonSaveMessage} />,
             } : null,
           ].filter(Boolean) as { key: string; label: string; children: React.ReactNode }[]}
         />
@@ -288,7 +235,7 @@ export default function MultiAgentPage() {
 
   // ===== 右栏 =====
   const renderRightPanel = () => {
-    const activeTrace = state.agentTraces[activeAgent];
+    const activeTrace = agentTraces[activeAgent];
     return (
       <div>
         <div className="mb-3">
@@ -307,7 +254,7 @@ export default function MultiAgentPage() {
           />
         </div>
 
-        {state.qaResult && (
+        {qaResult && (
           <Card
             size="small"
             title={
@@ -319,7 +266,7 @@ export default function MultiAgentPage() {
             className="mb-3"
             style={{ borderRadius: 10, border: `1px solid ${C.border}`, boxShadow: 'none' }}
           >
-            <QaRadarChart qaResult={state.qaResult} />
+            <QaRadarChart qaResult={qaResult} />
           </Card>
         )}
 
@@ -399,10 +346,10 @@ export default function MultiAgentPage() {
           />
         </div>
 
-        {state.retryCount > 0 && (
+        {retryCount > 0 && (
           <div style={{ marginTop: 6 }}>
             <Tag style={{ borderRadius: 4, fontSize: 11, color: C.warn, background: '#fef7e0', border: `1px solid #fde0a0` }}>
-              已重试 {state.retryCount} 次
+              已重试 {retryCount} 次
             </Tag>
           </div>
         )}
@@ -419,9 +366,9 @@ export default function MultiAgentPage() {
         styles={{ body: { padding: '6px 8px' } }}
       >
         <AgentTopology
-          statuses={state.agentStatuses}
-          retryCount={state.retryCount}
-          rejectTarget={state.rejectTarget}
+          statuses={agentStatuses}
+          retryCount={retryCount}
+          rejectTarget={rejectTarget}
         />
       </Card>
 
@@ -436,9 +383,9 @@ export default function MultiAgentPage() {
             <AgentCard
               key={key}
               agentKey={key}
-              status={state.agentStatuses[key]}
-              trace={state.agentTraces[key]}
-              qaResult={key === 'qa' ? state.qaResult : null}
+              status={agentStatuses[key]}
+              trace={agentTraces[key]}
+              qaResult={key === 'qa' ? qaResult : null}
             />
           ))}
         </div>
@@ -448,7 +395,7 @@ export default function MultiAgentPage() {
           <div style={{ fontSize: 12, fontWeight: 600, color: C.text2, marginBottom: 8, paddingLeft: 4 }}>
             产出内容
           </div>
-          {running && !state.teachingDesign && (
+          {running && !teachingDesign && (
             <div className="flex justify-center items-center" style={{ height: 200, border: `1px dashed ${C.border}`, borderRadius: 12 }}>
               <Spin tip="Agent 正在生成..." size="large">
                 <div style={{ height: 100 }} />
