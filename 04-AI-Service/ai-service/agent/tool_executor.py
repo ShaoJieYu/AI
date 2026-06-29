@@ -10,7 +10,7 @@ import json
 import requests
 from services.tongyi_service import generate_lesson as _generate_lesson
 
-# 后端 Spring Boot 服务地址
+# 后端 Spring Boot 服务地址（用于备课历史保存等接口）
 BACKEND_URL = "http://localhost:8080/api"
 
 
@@ -18,12 +18,13 @@ def search_textbook(keyword: str, subject: str) -> str:
     """
     搜索教材内容（阶段 2 起改用 Chroma 向量库真实检索）。
 
-    从对应学科的 Chroma collection 中检索 top-5 相关片段，
-    每条带相似度分数、教材名、页码。如果该学科未入库，返回友好提示。
+    从对应学科的 Chroma collection 中检索 top-6 相关片段，
+    每条带相似度分数、教材名、页码。相似度低于 0.40 的片段会被过滤，
+    避免低质量检索结果误导 LLM。如果该学科未入库，返回友好提示。
     """
     try:
         from rag.vector_store import search_as_text
-        return search_as_text(query=keyword, subject=subject, top_k=5)
+        return search_as_text(query=keyword, subject=subject, top_k=6, min_score=0.40)
     except ImportError:
         return (
             f"【检索失败】RAG 模块未安装，请确保 rag/ 目录存在且依赖已安装。"

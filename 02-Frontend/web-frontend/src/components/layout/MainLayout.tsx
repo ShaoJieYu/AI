@@ -27,6 +27,7 @@ const menuItems = [
   { key: '/lessons/history', icon: <FileTextOutlined />, label: '备课历史' },
   { key: '/homework', icon: <CameraOutlined />, label: '错题拍照解析' },
   { key: '/agent/demo', icon: <RobotOutlined />, label: 'Agent智能备课' },
+  { key: '/agent/multi', icon: <RobotOutlined />, label: '多Agent协作' },
   { key: '/resources', icon: <BarChartOutlined />, label: '教学资源' },
   { key: '/progress', icon: <BarChartOutlined />, label: '教学进度' },
   { key: '/settings', icon: <SettingOutlined />, label: '设置' },

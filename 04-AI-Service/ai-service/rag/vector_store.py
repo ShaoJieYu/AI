@@ -97,6 +97,7 @@ def search(
     query: str,
     subject: str,
     top_k: int = 5,
+    min_score: float = 0.0,
 ) -> List[Dict]:
     """
     在指定学科 collection 中检索与 query 最相关的 chunk。
@@ -107,6 +108,8 @@ def search(
         query: 查询文本（如"一般过去时"）
         subject: 学科
         top_k: 返回前 k 条
+        min_score: 相似度下限（0~1），低于此值的片段会被丢弃。建议 0.65，
+                  过滤掉勉强相关的低质量结果，避免误导 LLM。
 
     Returns:
         [{"text": "...", "metadata": {...}, "score": 0.87}, ...]
@@ -125,9 +128,11 @@ def search(
     if not query_vec:
         return []
 
+    # 多取一些再用 min_score 过滤，避免过滤后剩余条数过少
+    fetch_k = min(top_k * 2, col.count())
     results = col.query(
         query_embeddings=[query_vec],
-        n_results=min(top_k, col.count()),
+        n_results=fetch_k,
         include=["documents", "metadatas", "distances"],
     )
 
@@ -138,23 +143,35 @@ def search(
     output = []
     for text, meta, dist in zip(docs, metas, dists):
         score = 1 - dist
+        if score < min_score:
+            continue
         output.append({"text": text, "metadata": meta, "score": round(score, 4)})
+        if len(output) >= top_k:
+            break
     return output
 
 
-def search_as_text(query: str, subject: str, top_k: int = 5) -> str:
+def search_as_text(query: str, subject: str, top_k: int = 5, min_score: float = 0.0) -> str:
     """
     检索并把结果格式化成字符串（供 search_textbook 工具直接返回给大模型）。
+
+    Args:
+        query: 查询文本
+        subject: 学科（中文）
+        top_k: 返回前 k 条
+        min_score: 相似度下限，低于此值的片段会被丢弃
     """
-    results = search(query, subject, top_k)
+    results = search(query, subject, top_k, min_score)
     if not results:
         return (
             f"【教材检索结果：{subject} - {query}】\n"
-            f"未检索到相关教材内容。可能原因：该学科教材尚未入库，"
-            f"或检索关键词与教材内容匹配度不足。"
+            f"未检索到相关教材内容（相似度均低于 {min_score}）。可能原因：\n"
+            f"1. 该学科教材尚未入库\n"
+            f"2. 检索关键词与教材内容匹配度不足，建议尝试更具体的章节标题或单元编号\n"
+            f"3. 关键词用了英文而教材是中文，或反之"
         )
 
-    lines = [f"【教材检索结果：{subject} - {query}】共找到 {len(results)} 条相关片段\n"]
+    lines = [f"【教材检索结果：{subject} - {query}】共找到 {len(results)} 条相关片段（相似度 >= {min_score}）\n"]
     for i, r in enumerate(results, 1):
         meta = r["metadata"]
         book = meta.get("book", "未知教材")

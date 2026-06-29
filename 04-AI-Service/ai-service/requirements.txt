@@ -6,3 +6,7 @@ python-dotenv==1.0.0
 # 阶段 2 RAG 检索增强
 pymupdf
 chromadb
+# 阶段 4 Multi-Agent 多智能体协作
+langgraph>=0.2.0
+langchain-core>=0.3.0
+redis>=5.0.0

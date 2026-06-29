@@ -16,6 +16,7 @@ import ResourceListPage from '@/pages/Resources/ResourceListPage';
 import ProgressTrackPage from '@/pages/Progress/ProgressTrackPage';
 import SettingsPage from '@/pages/Settings/SettingsPage';
 import AgentDemoPage from '@/pages/Agent/AgentDemoPage';
+import MultiAgentPage from '@/pages/MultiAgent/MultiAgentPage';
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated } = useAuthStore();
@@ -63,6 +64,7 @@ function App() {
         <Route path="/settings" element={<SettingsPage />} />
 
         <Route path="/agent/demo" element={<AgentDemoPage />} />
+        <Route path="/agent/multi" element={<MultiAgentPage />} />
       </Route>
 
       <Route path="*" element={<Navigate to="/" replace />} />
