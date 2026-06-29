@@ -15,7 +15,7 @@ trace 记录每一步，供前端可视化展示 Agent 思考过程。
 import json
 from typing import List, Dict, Optional, Any
 from common.llm import qwen_plus
-from multi_agent.tools import execute_multi_agent_tool
+from multi_agent.tools import execute_multi_agent_tool, extract_unit_from_text
 
 
 class ReActLoop:
@@ -44,6 +44,7 @@ class ReActLoop:
         self.max_iterations = max_iterations
         self.token = token
         self.trace: List[Dict[str, Any]] = []
+        self.unit_hint: Optional[int] = None  # 程序化提取的 Unit 编号（兜底用）
 
     def run(self, user_input: str, context: str = "") -> Dict[str, Any]:
         """
@@ -63,6 +64,15 @@ class ReActLoop:
         """
         # 重置 trace（每次 run 都是独立的）
         self.trace = []
+
+        # 程序化兜底：从 user_input + context 提取 Unit 编号
+        # 防止 LLM 漏传 unit 参数导致检索到前言/目录等无关内容
+        combined_text = user_input or ""
+        if context:
+            combined_text = f"{combined_text}\n{context}"
+        self.unit_hint = extract_unit_from_text(combined_text)
+        if self.unit_hint:
+            print(f"[ReAct 兜底] 从输入提取到 Unit={self.unit_hint}，将用于 search_textbook 自动注入")
 
         # 构造初始消息列表
         messages = [
@@ -149,8 +159,10 @@ class ReActLoop:
                     "input": func_args,
                 })
 
-                # 执行工具
-                result = execute_multi_agent_tool(func_name, func_args, token=self.token)
+                # 执行工具（传入 unit_hint 用于 search_textbook 自动兜底）
+                result = execute_multi_agent_tool(
+                    func_name, func_args, token=self.token, unit_hint=self.unit_hint
+                )
 
                 # 记录 Observation
                 self.trace.append({

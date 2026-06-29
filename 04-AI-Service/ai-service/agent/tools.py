@@ -15,18 +15,22 @@ search_textbook_tool = {
     "type": "function",
     "function": {
         "name": "search_textbook",
-        "description": "根据关键词和学科搜索教材内容，返回相关章节的原文片段。用于备课前查找教材依据。",
+        "description": "根据关键词和学科搜索教材内容，返回相关章节的原文片段。用于备课前查找教材依据。建议组合使用'Unit 编号 + 章节标题 + 主题词'作为关键词，比单独主题词命中更精准。",
         "parameters": {
             "type": "object",
             "properties": {
                 "keyword": {
                     "type": "string",
-                    "description": "搜索关键词，如'静电场'、'一般过去时'、'牛顿第二定律'"
+                    "description": "搜索关键词，如'静电场'、'一般过去时'、'牛顿第二定律'，建议组合'Unit 编号 + 章节标题 + 主题词'"
                 },
                 "subject": {
                     "type": "string",
-                    "enum": ["物理", "化学", "生物", "数学", "英语", "语文"],
+                    "enum": ["物理", "化学", "生物", "数学", "英语", "语文", "历史", "地理", "政治"],
                     "description": "学科"
+                },
+                "unit": {
+                    "type": "integer",
+                    "description": "可选，指定 Unit 编号（如 6 表示只在第 6 单元范围内检索），避免前言/目录等非课文内容干扰。如果用户提到'第 N 单元'或'Unit N'，应传入此参数。"
                 }
             },
             "required": ["keyword", "subject"]

@@ -14,17 +14,27 @@ from services.tongyi_service import generate_lesson as _generate_lesson
 BACKEND_URL = "http://localhost:8080/api"
 
 
-def search_textbook(keyword: str, subject: str) -> str:
+def search_textbook(keyword: str, subject: str, unit: int = None) -> str:
     """
     搜索教材内容（阶段 2 起改用 Chroma 向量库真实检索）。
 
     从对应学科的 Chroma collection 中检索 top-6 相关片段，
-    每条带相似度分数、教材名、页码。相似度低于 0.40 的片段会被过滤，
+    每条带相似度分数、教材名、页码、Unit 信息。相似度低于 0.40 的片段会被过滤，
     避免低质量检索结果误导 LLM。如果该学科未入库，返回友好提示。
+
+    参数：
+        keyword: 检索关键词，建议组合使用"Unit 编号 + 章节标题 + 主题词"
+                 比单独主题词命中更精准
+        subject: 学科（中文九学科：物理/化学/生物/数学/英语/语文/历史/地理/政治）
+        unit: 可选，指定 Unit 编号（如 6），只在对应 Unit 范围内检索，
+              避免前言/目录等非课文内容干扰
     """
     try:
         from rag.vector_store import search_as_text
-        return search_as_text(query=keyword, subject=subject, top_k=6, min_score=0.40)
+        where = {"unit": unit} if unit else None
+        return search_as_text(
+            query=keyword, subject=subject, top_k=6, min_score=0.40, where=where
+        )
     except ImportError:
         return (
             f"【检索失败】RAG 模块未安装，请确保 rag/ 目录存在且依赖已安装。"

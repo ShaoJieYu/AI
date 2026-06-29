@@ -9,11 +9,71 @@ Multi-Agent 工具定义和执行器
 - get_student_weak_points: 查询学生薄弱知识点（教学设计 Agent 用）
 """
 import json
+import re
 import requests
 from agent.tool_executor import search_textbook, generate_lesson, save_lesson_to_history
 
 # 后端服务地址
 BACKEND_URL = "http://localhost:8080/api"
+
+
+# ============================================================
+# Unit 编号提取（程序化兜底，防止 LLM 漏传 unit 参数）
+# ============================================================
+# 匹配模式（按优先级排序）：
+#   "unit": 6（JSON 字段，内容生成 Agent 接收教学设计 JSON 时用）
+#   "Unit 6" / "Unit6" / "UNIT 6"（英文，空格可选）
+#   "第 6 单元" / "第6单元" / "第 6单元"（中文，空格可选，支持中文数字）
+#   "第 6 章" / "第6章" / "第三章"（中文章节，支持中文数字）
+# 数字部分同时支持阿拉伯数字（1-30）和中文数字（一至十）
+_UNIT_PATTERNS = [
+    re.compile(r'"unit"\s*:\s*(\d+)', re.IGNORECASE),
+    re.compile(r"\bUnit\s*(\d+)\b", re.IGNORECASE),
+    re.compile(r"第\s*(\d+)\s*单元"),
+    re.compile(r"第\s*(\d+)\s*章"),
+    # 中文数字（一到十）支持，放在阿拉伯数字之后作为兜底
+    re.compile(r"第\s*([一二三四五六七八九十])\s*单元"),
+    re.compile(r"第\s*([一二三四五六七八九十])\s*章"),
+]
+
+# 中文数字转 int 的映射
+_CN_NUM_MAP = {
+    "一": 1, "二": 2, "三": 3, "四": 4, "五": 5,
+    "六": 6, "七": 7, "八": 8, "九": 9, "十": 10,
+}
+
+
+def extract_unit_from_text(text: str):
+    """
+    从字符串中提取 Unit 编号（程序化兜底）。
+
+    支持 "Unit 6"、"第 6 单元"、"第 6 章"、"第三章"、"unit": 6（JSON 字段）等模式。
+    按优先级匹配：JSON 字段 > Unit > 单元（数字）> 章（数字）> 单元（中文）> 章（中文）。
+
+    Args:
+        text: 待提取的字符串（如用户需求或教学设计 JSON）
+
+    Returns:
+        int: 提取到的 Unit 编号；未匹配到返回 None
+    """
+    if not text:
+        return None
+    for pattern in _UNIT_PATTERNS:
+        m = pattern.search(text)
+        if not m:
+            continue
+        raw = m.group(1)
+        # 先尝试阿拉伯数字
+        try:
+            unit = int(raw)
+        except ValueError:
+            # 再尝试中文数字
+            unit = _CN_NUM_MAP.get(raw)
+            if unit is None:
+                continue
+        if 1 <= unit <= 30:  # 合理范围校验，避免误匹配日期/页码
+            return unit
+    return None
 
 
 # ============================================================
@@ -78,7 +138,7 @@ search_textbook_tool = {
         "description": (
             "根据关键词和学科搜索教材内容，返回相关章节的原文片段。用于备课前查找教材依据。"
             "关键词建议组合使用：单元编号 + 章节标题 + 主题词，"
-            "如 'Unit 6 Weather and Mood' 或 '牛顿第二定律 F=ma'，"
+            "如 'Unit 6 Rain or Shine weather' 或 '牛顿第二定律 F=ma'，"
             "比单独一个主题词命中更精准。"
         ),
         "parameters": {
@@ -86,12 +146,16 @@ search_textbook_tool = {
             "properties": {
                 "keyword": {
                     "type": "string",
-                    "description": "搜索关键词，建议组合：单元编号+章节标题+主题词，如 'Unit 6 Weather and Mood'、'静电场 库仑定律'、'一般过去时 动词变形'"
+                    "description": "搜索关键词，建议组合：单元编号+章节标题+主题词，如 'Unit 6 Rain or Shine weather'、'静电场 库仑定律'、'一般过去时 动词变形'"
                 },
                 "subject": {
                     "type": "string",
                     "description": "学科（中文）：物理/化学/生物/数学/英语/语文/历史/地理/政治",
                     "enum": ["物理", "化学", "生物", "数学", "英语", "语文", "历史", "地理", "政治"]
+                },
+                "unit": {
+                    "type": "integer",
+                    "description": "可选，指定 Unit 编号（如 6 表示只在第 6 单元范围内检索），避免前言/目录等非课文内容干扰。如果用户提到'第 N 单元'或'Unit N'，应传入此参数。"
                 }
             },
             "required": ["keyword", "subject"]
@@ -129,7 +193,8 @@ TEACHING_DESIGN_TOOLS = [search_textbook_tool, get_student_weak_points_tool]
 CONTENT_GENERATION_TOOLS = [search_textbook_tool]
 
 
-def execute_multi_agent_tool(name: str, arguments: dict, token: str = None) -> str:
+def execute_multi_agent_tool(name: str, arguments: dict, token: str = None,
+                             unit_hint: int = None) -> str:
     """
     执行 Multi-Agent 工具的统一入口。
 
@@ -137,10 +202,18 @@ def execute_multi_agent_tool(name: str, arguments: dict, token: str = None) -> s
         name: 工具名
         arguments: 参数字典
         token: JWT token（save_lesson_to_history 需要）
+        unit_hint: 程序化提取的 Unit 编号（兜底用）。当 LLM 调用 search_textbook
+                   但未传 unit 参数时，自动注入此值，避免检索到前言/目录等无关内容。
 
     返回：
         工具执行结果字符串
     """
+    # 程序化兜底：search_textbook 未传 unit 但有 unit_hint，自动补上
+    if name == "search_textbook" and unit_hint is not None:
+        if arguments.get("unit") is None:
+            arguments["unit"] = unit_hint
+            print(f"[工具兜底] search_textbook 未传 unit，自动注入 unit={unit_hint}")
+
     func = MULTI_AGENT_TOOL_REGISTRY.get(name)
     if not func:
         return f"错误：未知的工具 '{name}'"
