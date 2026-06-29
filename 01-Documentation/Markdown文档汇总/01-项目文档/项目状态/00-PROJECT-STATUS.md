@@ -1,9 +1,9 @@
 # 项目状态总览
 
-**文档版本**: v2.8 | **更新时间**: 2026-06-30 | **维护者**: AI文档
+**文档版本**: v2.9 | **更新时间**: 2026-06-30 | **维护者**: AI文档
 
 > 📌 **新AI工程师必读！** 本文档帮助你在5分钟内理解项目当前状态和进度
-> **当前最紧要**: RAG 检索准确性修复已完成（Unit 元数据过滤 + 程序化兜底，告别前言干扰）
+> **当前最紧要**: 物理教材入库 + RAG 跨学科隔离已完成（物理必修2.pdf 220 chunks，按章过滤+学科隔离）
 
 > ⚠️ **AI 协作规则**
 >
@@ -78,11 +78,19 @@
 - [x] **程序化兜底（方案 B）**：`extract_unit_from_text()` 函数支持 Unit N / 第N单元 / 第N章 / JSON "unit": N 字段（含中文数字一到十），ReActLoop 从 user_input + context 提取 unit_hint，LLM 漏传时自动注入到 search_textbook
 - [x] **验证结果**：Unit 6 Rain or Shine 备课请求，2 次 search_textbook 调用均正确检索到第 50 页 Unit 6 内容（而非前言），耗时 74.7s，生成内容正确引用教材原文
 
+**物理教材入库与跨学科隔离（2026-06-30）**：复用 RAG 优化方案，支持第二本教材
+- [x] **物理章节检测**：`unit_detector.py` 新增 `detect_units_physics` 函数，三步走策略（找锚点 → 频次过滤 → 范围扫描），支持"第 N 章 XXX"中文数字格式
+- [x] **学科路由**：`detect_units` 新增 subject 参数，物理走"第N章"策略，英语走"BIG Question + UNIT"策略
+- [x] **入库验证**：物理必修2.pdf 111 页 → 220 chunks，220/220 带 Unit 元数据，4 章正确识别（第五章抛体运动 / 第六章圆周运动 / 第七章万有引力 / 第八章机械能守恒）
+- [x] **跨学科隔离**：物理检索只返回物理教材内容，英语检索只返回英语教材内容（Chroma collection 按学科隔离）
+- [x] **迭代上限修复**：content_generation Agent 的 `max_iterations` 从 3 提升到 5，解决 LLM 用 3 次迭代全调 search_textbook 触发模板兜底问题
+- [x] **验证结果**：第五章抛体运动备课请求，2 次 search_textbook 全部命中物理教材（第3/5/19页），生成内容含教材原文引用+LaTeX公式+Markdown排版，耗时 124s
+
 **下一步可选方向**：
 - 浏览器端到端测试（登录后 token 透传，验证 save_lesson_to_history 成功入库）
 - 答辩演示准备（Multi-Agent 可视化是杀手锏）
 - 继续性能优化（主流程 teaching_design + content_generation ReAct + qa 串行链路占比 40s+，可考虑并发或缓存）
-- 其他学科教材入库（物理/化学等，复用 unit_detector.py 的 Unit 边界检测）
+- 更多学科教材入库（化学/生物等，复用 unit_detector.py 的章节检测能力）
 
 ---
 
