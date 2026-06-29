@@ -13,6 +13,7 @@
 """
 import json
 from typing import Dict, Any
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pydantic import ValidationError
 
 from common.llm import qwen_plus
@@ -160,6 +161,9 @@ def format_content_with_markdown(content_draft: Dict[str, Any]) -> Dict[str, Any
     """
     后处理：检测五段式内容是否已有 Markdown 排版，没有的段调用 LLM 重写。
 
+    优化：使用 ThreadPoolExecutor 并发重写多段。串行 5 段约 60s，
+    并发后总耗时 ≈ 最长一段（约 12s），预计整体响应时间 103s → 55s。
+
     参数：
         content_draft: ContentDraft 转的 dict
 
@@ -170,14 +174,34 @@ def format_content_with_markdown(content_draft: Dict[str, Any]) -> Dict[str, Any
     if content_draft.get("template_used"):
         return content_draft
 
+    # 第 1 步：先收集所有需要重写的段（避免在循环中串行调 LLM）
+    sections_to_rewrite = []
     for key in _SECTION_LABELS:
         text = content_draft.get(key, "")
         if not text or "（模板兜底）" in text:
             continue
         if _has_markdown_format(text):
             continue
-        print(f"[内容生成 Agent] 检测到 {key} 无 Markdown 排版，调用 LLM 重写...")
-        content_draft[key] = _rewrite_section_with_markdown(key, text)
+        sections_to_rewrite.append((key, text))
+        print(f"[内容生成 Agent] 检测到 {key} 无 Markdown 排版，将并发重写")
+
+    if not sections_to_rewrite:
+        return content_draft
+
+    # 第 2 步：并发重写（max_workers=5，每段一个线程，dashscope SDK 线程安全）
+    print(f"[内容生成 Agent] 并发重写 {len(sections_to_rewrite)} 段（串行需 ~{len(sections_to_rewrite) * 12}s，并发预计 ~12s）")
+    with ThreadPoolExecutor(max_workers=5, thread_name_prefix="md-rewrite") as executor:
+        future_to_key = {
+            executor.submit(_rewrite_section_with_markdown, key, text): key
+            for key, text in sections_to_rewrite
+        }
+        for future in as_completed(future_to_key):
+            key = future_to_key[future]
+            try:
+                content_draft[key] = future.result()
+            except Exception as e:
+                # 单段失败不影响其他段，保留原文
+                print(f"[内容生成 Agent] {key} 并发重写异常: {e}，保留原文")
 
     return content_draft
 
