@@ -12,6 +12,8 @@ public class HomeworkAnalysisRecord {
     @TableId(type = IdType.AUTO)
     private Long id;
 
+    private Long studentId;
+
     private String wrongQuestions;
     
     private String errorAnalysis;

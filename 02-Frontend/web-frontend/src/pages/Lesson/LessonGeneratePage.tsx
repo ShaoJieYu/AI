@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Card, Form, Select, Input, Button, Slider, Steps, message } from 'antd';
+import { Card, Form, Select, Input, Button, Slider, Steps, message, Tag } from 'antd';
 import { BookOutlined, BulbOutlined, ArrowLeftOutlined, ArrowRightOutlined } from '@ant-design/icons';
 import { useQuery } from '@tanstack/react-query';
 import { studentApi } from '@/api/student';
@@ -70,6 +70,13 @@ export default function LessonGeneratePage() {
   const students = studentsData?.data?.items || [];
 
   const selectedStudent = students.find(s => s.id === watchedStudentId);
+
+  // 选中学生后加载其薄弱知识点
+  const { data: weakPoints = [] } = useQuery({
+    queryKey: ['studentWeakPoints', watchedStudentId],
+    queryFn: () => studentApi.getWeakPoints(watchedStudentId!),
+    enabled: !!watchedStudentId,
+  });
 
   // 自动检测所选学生的学科并填入科目字段；学生无科目则留空
   useEffect(() => {
@@ -173,6 +180,18 @@ export default function LessonGeneratePage() {
           : textbookInfo;
       }
 
+      // 注入学生薄弱点信息到备课请求
+      const weakPointsInfo = weakPoints
+        .filter((wp: any) => wp.masteryLevel === 'WEAK')
+        .map((wp: any) => wp.knowledgePoint)
+        .join('、');
+      if (weakPointsInfo) {
+        const weakPointsText = `【学生薄弱点】${weakPointsInfo}`;
+        customRequirements = customRequirements
+          ? `${customRequirements}\n${weakPointsText}`
+          : weakPointsText;
+      }
+
       const request: GenerateLessonRequest = {
         studentId: watchedStudentId!,
         subject: watchedSubject!,
@@ -244,6 +263,20 @@ export default function LessonGeneratePage() {
                     </div>
                   </div>
                 </div>
+
+                {weakPoints.filter((wp: any) => wp.masteryLevel === 'WEAK').length > 0 && (
+                  <div className="mt-4 pt-4 border-t border-gray-100">
+                    <div className="text-sm text-gray-500 mb-2">薄弱知识点：</div>
+                    <div className="flex flex-wrap gap-2">
+                      {weakPoints.filter((wp: any) => wp.masteryLevel === 'WEAK').slice(0, 5).map((wp: any) => (
+                        <Tag key={wp.id} color="red">{wp.knowledgePoint}</Tag>
+                      ))}
+                      {weakPoints.filter((wp: any) => wp.masteryLevel === 'WEAK').length > 5 && (
+                        <Tag>+{weakPoints.filter((wp: any) => wp.masteryLevel === 'WEAK').length - 5} 更多</Tag>
+                      )}
+                    </div>
+                  </div>
+                )}
               </Card>
             )}
           </div>

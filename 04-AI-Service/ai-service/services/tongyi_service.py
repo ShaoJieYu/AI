@@ -15,10 +15,18 @@ MODE_LABELS = {
 }
 
 def generate_lesson(subject: str, goal: str, difficulty: str, student: dict = None,
-                    mode: str = None, duration: int = None, custom_requirements: str = None) -> dict:
+                    mode: str = None, duration: int = None, custom_requirements: str = None,
+                    weak_points: list = None) -> dict:
     student_info = ""
     if student:
         student_info = f"\n学生信息：{student.get('name', '')}，{student.get('grade', '')}，学习基础：{student.get('learningBasics', '')}"
+
+    # 学生薄弱知识点
+    weak_points_info = ""
+    if weak_points:
+        wp_list = [wp.get("knowledgePoint", "") for wp in weak_points if wp.get("masteryLevel") == "WEAK"]
+        if wp_list:
+            weak_points_info = f"\n该生薄弱知识点：{'、'.join(wp_list)}。备课应侧重这些知识点，针对性突破。"
 
     mode_info = ""
     if mode:
@@ -54,7 +62,7 @@ def generate_lesson(subject: str, goal: str, difficulty: str, student: dict = No
     prompt = f"""你是一位拥有 20 年教学经验、深谙中高考命题规律的资深{subject}教师。请为以下教学需求生成一份达到"特级教师公开课"水准的备课内容：
 
 教学目标：{goal}
-难度等级：{difficulty}{student_info}{mode_info}{duration_info}{requirements_info}
+难度等级：{difficulty}{student_info}{weak_points_info}{mode_info}{duration_info}{requirements_info}
 
 【输出要求】
 1. 严格按下面五个小节顺序输出，每节使用 "## " 二级标题开头，不得增删小节、不得改标题文字。

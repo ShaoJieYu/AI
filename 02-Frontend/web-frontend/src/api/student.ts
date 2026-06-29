@@ -2,6 +2,7 @@ import axiosInstance from './client';
 import type {
   Student,
   StudentProfile,
+  StudentWeakPoint,
   CreateStudentRequest,
   UpdateStudentRequest,
   TeachingGoal,
@@ -55,5 +56,34 @@ export const studentApi = {
 
   getDashboardStats: async (): Promise<ApiResponse<{ midtermTarget: number; knowledgeMastery: number; homeworkCompletion: number }>> => {
     return axiosInstance.get('/students/dashboard-stats');
+  },
+
+  // ========== 学生薄弱知识点（阶段 2b-1） ==========
+  getWeakPoints: async (studentId: number): Promise<StudentWeakPoint[]> => {
+    const response = await axiosInstance.get(`/students/${studentId}/weak-points`);
+    return response.data?.data ?? [];
+  },
+
+  createWeakPoint: async (studentId: number, data: {
+    subject: string;
+    knowledgePoint: string;
+    masteryLevel: string;
+    notes?: string;
+  }): Promise<StudentWeakPoint> => {
+    const response = await axiosInstance.post(`/students/${studentId}/weak-points`, data);
+    return response.data?.data;
+  },
+
+  updateWeakPoint: async (studentId: number, id: number, data: {
+    knowledgePoint?: string;
+    masteryLevel?: string;
+    notes?: string;
+  }): Promise<StudentWeakPoint> => {
+    const response = await axiosInstance.put(`/students/${studentId}/weak-points/${id}`, data);
+    return response.data?.data;
+  },
+
+  deleteWeakPoint: async (studentId: number, id: number): Promise<void> => {
+    await axiosInstance.delete(`/students/${studentId}/weak-points/${id}`);
   },
 };

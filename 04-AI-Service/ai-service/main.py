@@ -26,6 +26,7 @@ class LessonRequest(BaseModel):
     mode: Optional[str] = None
     duration: Optional[int] = None
     custom_requirements: Optional[str] = None
+    weak_points: Optional[List[Dict]] = None
 
 class HomeworkImageRequest(BaseModel):
     images: List[str] # List of base64 encoded strings
@@ -44,7 +45,8 @@ def generate_lesson_endpoint(request: LessonRequest):
             request.student_info,
             request.mode,
             request.duration,
-            request.custom_requirements
+            request.custom_requirements,
+            request.weak_points
         )
         return result
     except Exception as e:
@@ -65,16 +67,17 @@ def analyze_homework_endpoint(request: HomeworkImageRequest):
 # Agent 端点（阶段 1：Function Calling demo）
 # ============================================================
 class AgentRequest(BaseModel):
-    message: str
+    message: Optional[str] = None
+    messages: Optional[List[Dict]] = None
 
 @app.post("/api/agent/demo")
 def agent_demo(request: AgentRequest, authorization: Optional[str] = Header(None)):
     """
-    Agent demo 端点。
+    Agent demo 端点（阶段 2b-2：支持多轮对话记忆）。
 
-    用户用自然语言描述需求，Agent 自主决策调用工具完成任务。
-    例如："帮我备一节静电场的物理课"
-    Agent 会自主：search_textbook → generate_lesson → save_lesson_to_history → 总结
+    支持两种请求格式：
+    1. 兼容旧方式：{"message": "帮我备一节静电场的物理课"}
+    2. 多轮对话：{"messages": [{"role": "user", "content": "..."}, {"role": "assistant", "content": "..."}]}
 
     authorization: 前端透传的 JWT Bearer token，用于 save_lesson_to_history 工具调后端鉴权。
     """
@@ -84,7 +87,12 @@ def agent_demo(request: AgentRequest, authorization: Optional[str] = Header(None
         token = authorization[7:]
 
     try:
-        result = run_agent(request.message, token=token)
+        # 多轮对话模式（优先使用 messages）
+        if request.messages:
+            result = run_agent(messages=request.messages, token=token)
+        else:
+            # 兼容旧方式：单条消息
+            result = run_agent(user_message=request.message or "", token=token)
         return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

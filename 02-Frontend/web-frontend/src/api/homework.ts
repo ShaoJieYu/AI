@@ -3,11 +3,14 @@ import type { HomeworkAnalysisRecord } from '@/types/homework';
 import type { ApiResponse } from '@/types/api';
 
 export const homeworkApi = {
-  analyzeHomework: async (images: File[]): Promise<HomeworkAnalysisRecord> => {
+  analyzeHomework: async (images: File[], studentId?: number): Promise<HomeworkAnalysisRecord> => {
     const formData = new FormData();
     images.forEach((image) => {
       formData.append('images', image);
     });
+    if (studentId) {
+      formData.append('studentId', String(studentId));
+    }
 
     const response = await axiosInstance.post<ApiResponse<HomeworkAnalysisRecord>>('/homework/analyze', formData, {
       headers: {

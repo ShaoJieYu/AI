@@ -6,8 +6,10 @@ import com.lessonplatform.common.Result;
 import com.lessonplatform.dto.StudentFormDTO;
 import com.lessonplatform.model.LessonPlan;
 import com.lessonplatform.model.Student;
+import com.lessonplatform.model.StudentWeakPoint;
 import com.lessonplatform.service.LessonService;
 import com.lessonplatform.service.StudentService;
+import com.lessonplatform.service.StudentWeakPointService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
@@ -25,6 +27,7 @@ public class StudentController {
 
     private final StudentService studentService;
     private final LessonService lessonService;
+    private final StudentWeakPointService weakPointService;
 
     @GetMapping
     public Result<PageResult<Student>> getStudentList(
@@ -99,5 +102,33 @@ public class StudentController {
     public Result<java.util.Map<String, Object>> getDashboardStats() {
         java.util.Map<String, Object> stats = studentService.getTutorStudentStats();
         return Result.success(stats);
+    }
+
+    // ========== 学生薄弱知识点 ==========
+
+    @GetMapping("/{studentId}/weak-points")
+    public Result<List<StudentWeakPoint>> getWeakPoints(@PathVariable Long studentId) {
+        return Result.success(weakPointService.getWeakPointsByStudent(studentId));
+    }
+
+    @PostMapping("/{studentId}/weak-points")
+    public Result<StudentWeakPoint> createWeakPoint(@PathVariable Long studentId,
+                                                     @RequestBody StudentWeakPoint weakPoint) {
+        weakPoint.setStudentId(studentId);
+        return Result.success("薄弱点添加成功", weakPointService.createWeakPoint(weakPoint));
+    }
+
+    @PutMapping("/{studentId}/weak-points/{id}")
+    public Result<StudentWeakPoint> updateWeakPoint(@PathVariable Long studentId,
+                                                     @PathVariable Long id,
+                                                     @RequestBody StudentWeakPoint weakPoint) {
+        return Result.success("薄弱点更新成功", weakPointService.updateWeakPoint(id, weakPoint));
+    }
+
+    @DeleteMapping("/{studentId}/weak-points/{id}")
+    public Result<Void> deleteWeakPoint(@PathVariable Long studentId,
+                                        @PathVariable Long id) {
+        weakPointService.deleteWeakPoint(id);
+        return Result.success("薄弱点删除成功", null);
     }
 }

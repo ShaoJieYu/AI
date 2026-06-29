@@ -5,6 +5,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClient;
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -35,6 +36,11 @@ public class AiService {
 
             if (params.containsKey("student")) {
                 request.put("student_info", params.get("student"));
+            }
+
+            // 注入学生薄弱知识点
+            if (params.containsKey("weakPoints")) {
+                request.put("weak_points", params.get("weakPoints"));
             }
 
             // 透传备课模式、时长、自定义要求（含学段/课本/章节/教学备注）给 AI 服务
@@ -87,6 +93,38 @@ public class AiService {
             fallback.put("errorAnalysis", "解析失败");
             fallback.put("knowledgePoints", "解析失败");
             fallback.put("suggestions", "解析失败");
+            return fallback;
+        }
+    }
+
+    /**
+     * 调用 AI 服务 Agent 端点（带会话消息列表）
+     *
+     * @param messages 历史消息列表 [{role, content}, ...]
+     * @return Agent 返回结果 {final_answer, trace}
+     */
+    public Map<String, Object> callAgent(List<Map<String, Object>> messages) {
+        log.info("调用 Agent 端点，消息数：{}", messages.size());
+
+        try {
+            Map<String, Object> request = new HashMap<>();
+            request.put("messages", messages);
+
+            Map<String, Object> result = webClient.post()
+                    .uri("/api/agent/demo")
+                    .bodyValue(request)
+                    .retrieve()
+                    .bodyToMono(Map.class)
+                    .timeout(Duration.ofSeconds(180))
+                    .block();
+
+            log.info("Agent 调用完成");
+            return result;
+        } catch (Exception e) {
+            log.error("Agent 调用失败", e);
+            Map<String, Object> fallback = new HashMap<>();
+            fallback.put("final_answer", "Agent 服务暂时不可用，请稍后重试。错误：" + e.getMessage());
+            fallback.put("trace", new ArrayList<>());
             return fallback;
         }
     }

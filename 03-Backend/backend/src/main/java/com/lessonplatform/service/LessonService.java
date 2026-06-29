@@ -10,6 +10,7 @@ import com.lessonplatform.dto.LessonSaveRequest;
 import com.lessonplatform.model.LessonContent;
 import com.lessonplatform.model.LessonPlan;
 import com.lessonplatform.model.Student;
+import com.lessonplatform.model.StudentWeakPoint;
 import com.lessonplatform.repository.LessonContentMapper;
 import com.lessonplatform.repository.LessonPlanMapper;
 import com.lessonplatform.security.SecurityUtils;
@@ -33,6 +34,7 @@ public class LessonService {
     private final LessonContentMapper lessonContentMapper;
     private final StudentService studentService;
     private final AiService aiService;
+    private final StudentWeakPointService weakPointService;
 
     public PageResult<LessonPlan> getLessonPlanList(PageQuery query, String keyword, String status) {
         Long tutorId = SecurityUtils.getCurrentUserId();
@@ -144,6 +146,12 @@ public class LessonService {
             generateParams.put("mode", request.getMode());
             generateParams.put("duration", request.getDuration());
             generateParams.put("customRequirements", request.getCustomRequirements());
+
+            // 加载学生薄弱知识点并传入 AI 服务
+            if (studentId != null) {
+                List<StudentWeakPoint> weakPoints = weakPointService.getWeakPointsByStudent(studentId);
+                generateParams.put("weakPoints", weakPoints);
+            }
 
             Map<String, String> generatedContent = aiService.generateLessonContent(generateParams);
 
