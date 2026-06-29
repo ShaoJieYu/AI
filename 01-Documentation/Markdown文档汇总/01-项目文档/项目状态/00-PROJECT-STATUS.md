@@ -1,9 +1,9 @@
 # 项目状态总览
 
-**文档版本**: v2.7 | **更新时间**: 2026-06-30 | **维护者**: AI文档
+**文档版本**: v2.8 | **更新时间**: 2026-06-30 | **维护者**: AI文档
 
 > 📌 **新AI工程师必读！** 本文档帮助你在5分钟内理解项目当前状态和进度
-> **当前最紧要**: 阶段 4 质量优化 + 性能优化已完成（内容质量 +234%，响应时间 -23.8%）
+> **当前最紧要**: RAG 检索准确性修复已完成（Unit 元数据过滤 + 程序化兜底，告别前言干扰）
 
 > ⚠️ **AI 协作规则**
 >
@@ -68,11 +68,21 @@
 - [x] **单段失败兜底**：单段重写异常不影响其他段，保留原文
 - [x] **验证结果**：响应时间 103s → 78.5s（-23.8%），内容质量保持不变（QA 评分 94/96/92 全部通过）
 
+**RAG 检索准确性修复（2026-06-30）**：解决"生成内容与向量库实际内容不符"问题
+- [x] **问题定位**：检索 Unit 6 时返回前言"致同学"（第 4 页）而非课文正文（第 50 页），因为前言提及所有 Unit 主题，关键词密度高导致相似度偏高
+- [x] **Unit 边界检测**：新增 `rag/unit_detector.py`，通过 BIG Question + UNIT 标记识别 8 个 Unit 边界，支持 Type A（标题在 UNIT 前）和 Type B（标题在 UNIT 后，如 Unit 7 "A Day to Remember"）
+- [x] **元数据入库**：`text_splitter.py` 的 chunk 元数据加 `unit`/`unit_title` 字段，英语教材重新入库后 192/401 chunk 带 Unit 元数据
+- [x] **向量库过滤**：`vector_store.py` 的 search/search_as_text 支持 `where` 参数（Chroma metadata 过滤），如 `where={"unit": 6}` 只在 Unit 6 范围内检索
+- [x] **工具 schema 升级**：search_textbook 工具加 `unit` 可选参数（agent/tools.py + multi_agent/tools.py）
+- [x] **Prompt 引导（方案 A）**：TEACHING_DESIGN_PROMPT 和 CONTENT_GENERATION_PROMPT 明确描述 unit 参数，任务流程加强制规则，Few-shot 示例展示带 unit 的调用
+- [x] **程序化兜底（方案 B）**：`extract_unit_from_text()` 函数支持 Unit N / 第N单元 / 第N章 / JSON "unit": N 字段（含中文数字一到十），ReActLoop 从 user_input + context 提取 unit_hint，LLM 漏传时自动注入到 search_textbook
+- [x] **验证结果**：Unit 6 Rain or Shine 备课请求，2 次 search_textbook 调用均正确检索到第 50 页 Unit 6 内容（而非前言），耗时 74.7s，生成内容正确引用教材原文
+
 **下一步可选方向**：
 - 浏览器端到端测试（登录后 token 透传，验证 save_lesson_to_history 成功入库）
 - 答辩演示准备（Multi-Agent 可视化是杀手锏）
 - 继续性能优化（主流程 teaching_design + content_generation ReAct + qa 串行链路占比 40s+，可考虑并发或缓存）
-- RAG 检索准确性优化（关键词命中前言/目录页而非课文正文，需改进入库切分或检索策略）
+- 其他学科教材入库（物理/化学等，复用 unit_detector.py 的 Unit 边界检测）
 
 ---
 
