@@ -46,8 +46,8 @@ def ingest(pdf_path: str, subject: str, grade: str, book: str,
     pages = extract_pdf(pdf_path)
     print(f"      提取到 {len(pages)} 页有效内容")
 
-    print(f"[2/5] 检测 Unit 边界")
-    unit_map = detect_units(pages, book=book)
+    print(f"[2/5] 检测 Unit 边界（subject={subject}）")
+    unit_map = detect_units(pages, book=book, subject=subject)
     print(f"      识别到 {len(unit_map)} 页归属某个 Unit")
     if unit_map:
         # 按 Unit 分组统计

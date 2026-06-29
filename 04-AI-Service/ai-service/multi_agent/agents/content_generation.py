@@ -247,7 +247,7 @@ def content_generation_agent(state: Dict[str, Any]) -> Dict[str, Any]:
     react = ReActLoop(
         system_prompt=prompt,
         tools=CONTENT_GENERATION_TOOLS,
-        max_iterations=3,  # 内容生成不需要太多轮工具调用
+        max_iterations=5,  # 内容生成需要足够轮次：3 次检索用掉了所有轮次会导致模板兜底
         token=token,
     )
 
