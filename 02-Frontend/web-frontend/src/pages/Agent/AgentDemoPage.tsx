@@ -445,7 +445,7 @@ export default function AgentDemoPage() {
         {/* ===== 左侧：聊天面板 ===== */}
         <Card
           style={{ flex: 1, display: 'flex', flexDirection: 'column' }}
-          bodyStyle={{ flex: 1, display: 'flex', flexDirection: 'column', padding: 0 }}
+          styles={{ body: { flex: 1, display: 'flex', flexDirection: 'column', padding: 0 } }}
         >
           {/* 会话头 */}
           <div style={{
@@ -636,7 +636,7 @@ export default function AgentDemoPage() {
             </Space>
           }
           style={{ width: 380, overflow: 'auto' }}
-          bodyStyle={{ padding: 12 }}
+          styles={{ body: { padding: 12 } }}
         >
           {/* 当前计划进度 */}
           {currentPlan.length > 0 && (
