@@ -93,6 +93,8 @@
 **/credentials/
 
 # ---------- 项目特定 ----------
+# Chroma 向量数据库持久化数据（可重新入库生成）
+**/chroma_db/
 # 老归档目录（_archive/）
 _archive/
 # 根目录已废弃的 web-frontend/（已迁到 02-Frontend/）

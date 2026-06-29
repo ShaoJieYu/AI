@@ -15,3 +15,11 @@ load_dotenv()
 DASHSCOPE_API_KEY = os.getenv("DASHSCOPE_API_KEY", "")
 AI_MODEL = "qwen-plus"
 SERVICE_PORT = 8001
+
+# ============================================================
+# 阶段 2：RAG 检索增强配置
+# ============================================================
+# Chroma 向量库持久化目录（相对 AI 服务根目录）
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+CHROMA_DB_PATH = os.path.join(BASE_DIR, "data", "chroma_db")
+TEXTBOOK_PDF_DIR = os.path.join(BASE_DIR, "data", "textbooks")
