@@ -1,25 +1,52 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import {
-  Card, Input, Button, Typography, Steps, Tag, Spin, Space, Divider,
-  Alert, Collapse, Tooltip, Empty,
+  Card, Input, Button, Typography, Steps, Tag, Spin, Space,
+  Alert, Collapse, Tooltip, Empty, Input as AntInput, Divider,
 } from 'antd';
 import {
   RobotOutlined, UserOutlined, SendOutlined, PlusOutlined,
   ToolOutlined, CheckCircleOutlined, DeleteOutlined, HistoryOutlined,
+  CheckOutlined, RedoOutlined, CloseOutlined,
 } from '@ant-design/icons';
-import { conversationApi, type ConversationMessage } from '@/api/conversation';
+import {
+  conversationApi,
+  type ConversationMessage,
+  type PlanStep,
+} from '@/api/conversation';
 import type { AgentTraceStep } from '@/api/agent';
 
-const { Title, Text, Paragraph } = Typography;
-const { TextArea } = Input;
+const { Title, Text } = Typography;
+const { TextArea } = AntInput;
+
+// ===== 卡片视图类型 =====
+type CardView =
+  | { kind: 'plan'; plan: PlanStep[] }
+  | { kind: 'step_result'; step: number; stepName: string; tool: string; result: string; plan: PlanStep[] }
+  | { kind: 'summary'; summary: string }
+  | { kind: 'text'; content: string };
+
+// 聊天消息（扩展：支持卡片视图）
+interface ChatMessage {
+  role: 'user' | 'assistant';
+  content: string;
+  timestamp: number;
+  card?: CardView;
+}
 
 export default function AgentDemoPage() {
   const [sessionId, setSessionId] = useState<string | null>(null);
-  const [messages, setMessages] = useState<ConversationMessage[]>([]);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [lastTrace, setLastTrace] = useState<AgentTraceStep[]>([]);
+  // 当前执行计划（用户确认后逐步执行）
+  const [currentPlan, setCurrentPlan] = useState<PlanStep[]>([]);
+  // 当前执行到第几步
+  const [currentStepIndex, setCurrentStepIndex] = useState(0);
+  // 重新执行时的反馈输入
+  const [retryInput, setRetryInput] = useState('');
+  const [retrying, setRetrying] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -39,36 +66,41 @@ export default function AgentDemoPage() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
+  // ===== 发送消息（阶段 3：先生成计划） =====
   const handleSend = useCallback(async () => {
     const msg = input.trim();
     if (!msg || !sessionId || loading) return;
 
     setInput('');
     setError('');
+    setCurrentPlan([]);
+    setCurrentStepIndex(0);
 
-    // 立即添加用户消息到本地
-    const userMsg: ConversationMessage = {
-      role: 'user',
-      content: msg,
-      timestamp: Date.now(),
+    // 立即添加用户消息
+    const userMsg: ChatMessage = {
+      role: 'user', content: msg, timestamp: Date.now(),
     };
     setMessages((prev) => [...prev, userMsg]);
     setLoading(true);
 
     try {
-      const res = await conversationApi.sendMessage(sessionId, msg);
+      // 阶段 3：先调 generatePlan 生成计划
+      const res = await conversationApi.generatePlan(sessionId, msg);
       if (res.data?.code === 200 && res.data?.data) {
-        const { finalAnswer, trace } = res.data.data;
-        const assistantMsg: ConversationMessage = {
+        const data = res.data.data;
+        const plan: PlanStep[] = data.plan || [];
+        setCurrentPlan(plan);
+
+        // 添加计划卡片
+        const assistantMsg: ChatMessage = {
           role: 'assistant',
-          content: finalAnswer,
+          content: `📋 执行计划（共${plan.length}步）`,
           timestamp: Date.now(),
-          trace,
+          card: { kind: 'plan', plan },
         };
         setMessages((prev) => [...prev, assistantMsg]);
-        setLastTrace(trace || []);
       } else {
-        setError(res.data?.message || 'Agent 调用失败');
+        setError(res.data?.message || '生成计划失败');
       }
     } catch (err: unknown) {
       const errorMsg = err instanceof Error ? err.message : '请求失败';
@@ -78,11 +110,162 @@ export default function AgentDemoPage() {
     }
   }, [input, sessionId, loading]);
 
+  // ===== 确认计划，开始逐步执行 =====
+  const handleConfirmPlan = useCallback(async () => {
+    if (!sessionId || currentPlan.length === 0) return;
+    setLoading(true);
+    setError('');
+    setCurrentStepIndex(0);
+
+    await executeStep(0);
+  }, [sessionId, currentPlan]);
+
+  // ===== 执行指定步骤 =====
+  const executeStep = useCallback(async (index: number) => {
+    if (!sessionId || !currentPlan[index]) return;
+
+    setLoading(true);
+    setError('');
+
+    try {
+      const step = currentPlan[index];
+      const res = await conversationApi.executeStep(sessionId, step);
+
+      if (res.data?.code === 200 && res.data?.data) {
+        const data = res.data.data;
+        setLastTrace(data.trace || []);
+
+        // 更新计划中该步骤的状态
+        const updatedPlan = [...currentPlan];
+        updatedPlan[index] = { ...step, status: 'completed' };
+        setCurrentPlan(updatedPlan);
+
+        // 添加步骤结果卡片
+        const resultMsg: ChatMessage = {
+          role: 'assistant',
+          content: `✅ 第${data.step}步完成：${data.step_name}`,
+          timestamp: Date.now(),
+          card: {
+            kind: 'step_result',
+            step: data.step,
+            stepName: data.step_name,
+            tool: data.tool,
+            result: data.result,
+            plan: updatedPlan,
+          },
+        };
+        setMessages((prev) => [...prev, resultMsg]);
+        setCurrentStepIndex(index);
+      } else {
+        setError(res.data?.message || '步骤执行失败');
+      }
+    } catch (err: unknown) {
+      const errorMsg = err instanceof Error ? err.message : '请求失败';
+      setError(errorMsg);
+    } finally {
+      setLoading(false);
+    }
+  }, [sessionId, currentPlan]);
+
+  // ===== 确认当前步骤结果，继续下一步 =====
+  const handleConfirmStep = useCallback(async () => {
+    const nextIndex = currentStepIndex + 1;
+    if (nextIndex >= currentPlan.length) {
+      // 所有步骤完成，生成总结
+      await handleGenerateSummary();
+    } else {
+      await executeStep(nextIndex);
+    }
+  }, [currentStepIndex, currentPlan]);
+
+  // ===== 重新执行当前步骤（用户选 A：输入修改意见后重新执行） =====
+  const handleRetryStep = useCallback(async () => {
+    if (!sessionId || !currentPlan[currentStepIndex]) return;
+    const feedback = retryInput.trim();
+    if (!feedback) return;
+
+    setRetrying(true);
+    setError('');
+
+    try {
+      const step = currentPlan[currentStepIndex];
+      const res = await conversationApi.retryStep(sessionId, feedback, step);
+
+      if (res.data?.code === 200 && res.data?.data) {
+        const data = res.data.data;
+        setLastTrace(data.trace || []);
+
+        // 更新消息中最后一个 step_result 卡片
+        setMessages((prev) => {
+          const newMsgs = [...prev];
+          // 找到最后一个 step_result 类型的消息替换
+          for (let i = newMsgs.length - 1; i >= 0; i--) {
+            if (newMsgs[i].card?.kind === 'step_result') {
+              newMsgs[i] = {
+                role: 'assistant',
+                content: `🔄 第${data.step}步已重新执行：${data.step_name}`,
+                timestamp: Date.now(),
+                card: {
+                  kind: 'step_result',
+                  step: data.step,
+                  stepName: data.step_name,
+                  tool: data.tool,
+                  result: data.result,
+                  plan: currentPlan,
+                },
+              };
+              break;
+            }
+          }
+          return newMsgs;
+        });
+
+        setRetryInput('');
+      } else {
+        setError(res.data?.message || '重新执行失败');
+      }
+    } catch (err: unknown) {
+      const errorMsg = err instanceof Error ? err.message : '请求失败';
+      setError(errorMsg);
+    } finally {
+      setRetrying(false);
+    }
+  }, [sessionId, currentPlan, currentStepIndex, retryInput]);
+
+  // ===== 生成总结 =====
+  const handleGenerateSummary = useCallback(async () => {
+    if (!sessionId) return;
+    setLoading(true);
+
+    try {
+      const res = await conversationApi.generateSummary(sessionId, currentPlan);
+      if (res.data?.code === 200 && res.data?.data) {
+        const summary = res.data.data.summary;
+        const summaryMsg: ChatMessage = {
+          role: 'assistant',
+          content: '📊 任务总结',
+          timestamp: Date.now(),
+          card: { kind: 'summary', summary },
+        };
+        setMessages((prev) => [...prev, summaryMsg]);
+      }
+    } catch (err: unknown) {
+      const errorMsg = err instanceof Error ? err.message : '总结生成失败';
+      setError(errorMsg);
+    } finally {
+      setLoading(false);
+    }
+  }, [sessionId, currentPlan]);
+
+  // ===== 新建会话 =====
   const handleNewSession = async () => {
     setMessages([]);
     setLastTrace([]);
     setError('');
     setLoading(false);
+    setCurrentPlan([]);
+    setCurrentStepIndex(0);
+    setRetryInput('');
     try {
       const res = await conversationApi.createSession();
       if (res.data?.code === 200 && res.data?.data?.sessionId) {
@@ -106,6 +289,146 @@ export default function AgentDemoPage() {
     '帮我备一节牛顿第二定律的物理课，难度困难，90分钟',
   ];
 
+  // ===== 渲染卡片视图 =====
+  const renderCard = (card: CardView) => {
+    if (card.kind === 'plan') {
+      return (
+        <div style={{ marginTop: 8 }}>
+          <div style={{
+            background: '#f6f8fa', borderRadius: 8, padding: 12,
+            border: '1px solid #d0d7de',
+          }}>
+            <Space style={{ marginBottom: 8 }}>
+              <ToolOutlined style={{ color: '#1677ff' }} />
+              <Text strong>执行计划（共{card.plan.length}步）</Text>
+            </Space>
+            <Steps
+              direction="vertical"
+              current={-1}
+              size="small"
+              items={card.plan.map((s) => ({
+                title: <Text strong style={{ fontSize: 13 }}>{s.name}</Text>,
+                description: <Text type="secondary" style={{ fontSize: 12 }}>{s.description}</Text>,
+              }))}
+            />
+          </div>
+          <div style={{ marginTop: 12, textAlign: 'center' }}>
+            <Button
+              type="primary"
+              icon={<CheckOutlined />}
+              onClick={handleConfirmPlan}
+              loading={loading}
+            >
+              确认开始执行
+            </Button>
+          </div>
+        </div>
+      );
+    }
+
+    if (card.kind === 'step_result') {
+      const isLast = card.step >= card.plan.length;
+      return (
+        <div style={{ marginTop: 8 }}>
+          <div style={{
+            background: '#f6f8fa', borderRadius: 8, padding: 12,
+            border: '1px solid #d0d7de',
+          }}>
+            <Space style={{ marginBottom: 8 }}>
+              <CheckCircleOutlined style={{ color: '#52c41a' }} />
+              <Text strong>第{card.step}步完成：{card.stepName}</Text>
+              <Tag color="blue">{card.tool}</Tag>
+            </Space>
+
+            {/* 计划进度 */}
+            <Steps
+              direction="vertical"
+              current={card.step - 1}
+              size="small"
+              style={{ marginBottom: 12 }}
+              items={card.plan.map((s, i) => ({
+                title: <Text style={{ fontSize: 12, color: i < card.step ? '#52c41a' : '#999' }}>{s.name}</Text>,
+                status: i < card.step ? 'finish' : i === card.step - 1 ? 'process' : 'wait',
+              }))}
+            />
+
+            {/* 结果内容 */}
+            <Collapse
+              ghost
+              size="small"
+              items={[{
+                key: '1',
+                label: <Text type="secondary" style={{ fontSize: 12 }}>查看结果详情</Text>,
+                children: (
+                  <pre style={{
+                    fontSize: 12, background: '#fff', padding: 8, borderRadius: 4,
+                    overflow: 'auto', maxHeight: 200, margin: 0,
+                    whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+                  }}>
+                    {card.result}
+                  </pre>
+                ),
+              }]}
+            />
+          </div>
+
+          {/* 确认 / 重新执行 按钮 */}
+          <div style={{ marginTop: 8 }}>
+            {/* 重新执行输入框 */}
+            <Space.Compact style={{ width: '100%', marginBottom: 8 }}>
+              <Input
+                placeholder="输入修改意见，重新执行当前步骤..."
+                value={retryInput}
+                onChange={(e) => setRetryInput(e.target.value)}
+                disabled={retrying}
+                prefix={<RedoOutlined style={{ color: '#999' }} />}
+              />
+              <Button
+                icon={<RedoOutlined />}
+                onClick={handleRetryStep}
+                loading={retrying}
+                disabled={!retryInput.trim()}
+              >
+                重新执行
+              </Button>
+            </Space.Compact>
+
+            <div style={{ textAlign: 'center' }}>
+              <Button
+                type="primary"
+                icon={<CheckOutlined />}
+                onClick={handleConfirmStep}
+                loading={loading}
+              >
+                {isLast ? '生成总结' : '确认继续下一步'}
+              </Button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    if (card.kind === 'summary') {
+      return (
+        <div style={{
+          marginTop: 8, background: '#f6ffed', borderRadius: 8, padding: 12,
+          border: '1px solid #b7eb8f',
+        }}>
+          <Space style={{ marginBottom: 8 }}>
+            <CheckCircleOutlined style={{ color: '#52c41a' }} />
+            <Text strong style={{ color: '#389e0d' }}>任务完成总结</Text>
+          </Space>
+          <div style={{ fontSize: 14, lineHeight: 1.8, color: '#333' }}>
+            {card.summary}
+          </div>
+        </div>
+      );
+    }
+
+    // text 类型：普通文本
+    return <div style={{ whiteSpace: 'pre-wrap' }}>{card.content}</div>;
+  };
+
   return (
     <div className="page-container" style={{ height: 'calc(100vh - 120px)' }}>
       <div className="page-header mb-4">
@@ -114,7 +437,7 @@ export default function AgentDemoPage() {
           Agent 智能备课
         </Title>
         <Text type="secondary">
-          多轮对话 · Agent 自主决策 · Redis 持久化会话
+          阶段 3 · Planning 自主规划 · 逐步执行确认
         </Text>
       </div>
 
@@ -134,6 +457,11 @@ export default function AgentDemoPage() {
               <Text strong>对话会话</Text>
               {sessionId && (
                 <Text code style={{ fontSize: 11 }}>{sessionId.slice(0, 8)}...</Text>
+              )}
+              {currentPlan.length > 0 && (
+                <Tag color="processing">
+                  计划进度 {currentStepIndex + 1}/{currentPlan.length}
+                </Tag>
               )}
             </Space>
             <Space size="small">
@@ -171,12 +499,11 @@ export default function AgentDemoPage() {
                 color: '#999',
               }}>
                 <RobotOutlined style={{ fontSize: 48, opacity: 0.3 }} />
-                <Text type="secondary">输入备课需求，Agent 将自主决策完成任务</Text>
+                <Text type="secondary">输入备课需求，Agent 将先制定计划再逐步执行</Text>
                 <Space wrap style={{ marginTop: 8, justifyContent: 'center' }}>
                   {examples.map((ex, i) => (
                     <Tag
                       key={i}
-                      className="cursor-pointer"
                       color="blue"
                       onClick={() => setInput(ex)}
                       style={{ cursor: 'pointer' }}
@@ -215,8 +542,8 @@ export default function AgentDemoPage() {
 
                 {/* 气泡内容 */}
                 <div style={{
-                  maxWidth: '75%',
-                  padding: '10px 14px',
+                  maxWidth: msg.card ? '80%' : '75%',
+                  padding: msg.card ? '10px 14px' : '10px 14px',
                   borderRadius: 12,
                   backgroundColor: msg.role === 'user' ? '#1677ff' : '#f5f5f5',
                   color: msg.role === 'user' ? '#fff' : '#333',
@@ -225,7 +552,14 @@ export default function AgentDemoPage() {
                   whiteSpace: 'pre-wrap',
                   wordBreak: 'break-word',
                 }}>
-                  {msg.content}
+                  {msg.card ? (
+                    <div>
+                      <Text style={{ color: '#666', fontSize: 13 }}>{msg.content}</Text>
+                      {renderCard(msg.card)}
+                    </div>
+                  ) : (
+                    msg.content
+                  )}
                 </div>
               </div>
             ))}
@@ -246,7 +580,9 @@ export default function AgentDemoPage() {
                 }}>
                   <Space>
                     <Spin size="small" />
-                    <Text type="secondary">Agent 正在思考中...</Text>
+                    <Text type="secondary">
+                      {currentPlan.length === 0 ? 'Agent 正在制定计划...' : `Agent 正在执行第${currentStepIndex + 1}步...`}
+                    </Text>
                   </Space>
                 </div>
               </div>
@@ -302,6 +638,25 @@ export default function AgentDemoPage() {
           style={{ width: 380, overflow: 'auto' }}
           bodyStyle={{ padding: 12 }}
         >
+          {/* 当前计划进度 */}
+          {currentPlan.length > 0 && (
+            <div style={{ marginBottom: 16 }}>
+              <Text strong style={{ fontSize: 13 }}>当前计划进度</Text>
+              <Steps
+                direction="vertical"
+                current={currentStepIndex}
+                size="small"
+                style={{ marginTop: 8 }}
+                items={currentPlan.map((s, i) => ({
+                  title: <Text style={{ fontSize: 12 }}>{s.name}</Text>,
+                  status: i < currentStepIndex ? 'finish' : i === currentStepIndex ? 'process' : 'wait',
+                  description: <Text type="secondary" style={{ fontSize: 11 }}>{s.tool}</Text>,
+                }))}
+              />
+              <Divider style={{ margin: '12px 0' }} />
+            </div>
+          )}
+
           {lastTrace.length === 0 ? (
             <Empty
               description="发送消息后，Agent 的决策过程将显示在此处"
@@ -335,8 +690,7 @@ export default function AgentDemoPage() {
                               <pre style={{
                                 fontSize: 11, background: '#fafafa',
                                 padding: 8, borderRadius: 4,
-                                overflow: 'auto', maxHeight: 120,
-                                margin: 0,
+                                overflow: 'auto', maxHeight: 120, margin: 0,
                               }}>
                                 {JSON.stringify(step.arguments, null, 2)}
                               </pre>
@@ -368,30 +722,13 @@ export default function AgentDemoPage() {
                             <pre style={{
                               fontSize: 11, background: '#fafafa',
                               padding: 8, borderRadius: 4,
-                              overflow: 'auto', maxHeight: 120,
-                              margin: 0,
+                              overflow: 'auto', maxHeight: 120, margin: 0,
                             }}>
                               {step.result_preview}
                             </pre>
                           ),
                         }]}
                       />
-                    ),
-                    icon: <CheckCircleOutlined style={{ fontSize: 14, color: '#52c41a' }} />,
-                  };
-                }
-                if (step.action === 'final_answer') {
-                  return {
-                    title: (
-                      <Space size={4}>
-                        <Tag color="success" style={{ fontSize: 11 }}>完成</Tag>
-                        <Text type="secondary" style={{ fontSize: 13 }}>Agent 任务完成</Text>
-                      </Space>
-                    ),
-                    description: (
-                      <Text type="secondary" style={{ fontSize: 12 }}>
-                        {step.answer_preview}
-                      </Text>
                     ),
                     icon: <CheckCircleOutlined style={{ fontSize: 14, color: '#52c41a' }} />,
                   };

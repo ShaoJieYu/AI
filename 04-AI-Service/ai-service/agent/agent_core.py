@@ -145,3 +145,185 @@ def run_agent(messages: list = None, user_message: str = None, token: str = None
         "final_answer": "Agent 达到最大循环次数，未完成任务。",
         "trace": trace
     }
+
+
+# ============================================================
+# 阶段 3：单步骤执行模式（Planning 逐步执行）
+# ============================================================
+
+# 单步骤执行的系统提示词
+STEP_EXECUTION_PROMPT = """你是一个智能备课助手 Agent。用户已经确认了执行计划，现在你要逐步执行。
+
+当前需要执行的计划步骤是：第 {step} 步 - {step_name}
+步骤说明：{step_description}
+对应的工具：{tool}
+
+请根据用户的原始需求和上下文，调用 {tool} 工具完成这一步。
+- 每次只调用一个工具
+- 工具参数要从用户的原始需求中提取
+- 如果需要前一步的结果，可以从对话历史中获取
+- 不要做计划之外的事情，只完成当前这一步"""
+
+
+def run_agent_step(messages: list, plan_step: dict, token: str = None) -> dict:
+    """
+    执行计划中的单个步骤。
+
+    参数：
+        messages: 完整对话历史（含 system/user/assistant/tool 消息）
+        plan_step: 当前步骤的信息 {"step": 1, "name": "检索教材", "description": "...", "tool": "search_textbook"}
+        token: JWT token
+
+    返回：
+        {
+            "type": "step_result",
+            "step": 步骤序号,
+            "step_name": 步骤名,
+            "tool": 调用的工具名,
+            "tool_args": 工具参数,
+            "result": 工具返回结果,
+            "trace": [决策轨迹]
+        }
+    """
+    step_num = plan_step.get("step", 0)
+    step_name = plan_step.get("name", "")
+    step_desc = plan_step.get("description", "")
+    tool_name = plan_step.get("tool", "")
+
+    # 构造步骤执行的提示词
+    step_prompt = STEP_EXECUTION_PROMPT.format(
+        step=step_num,
+        step_name=step_name,
+        step_description=step_desc,
+        tool=tool_name
+    )
+
+    # 在消息历史后追加步骤执行指令
+    step_messages = list(messages)  # 复制，不修改原始列表
+    step_messages.append({"role": "system", "content": step_prompt})
+
+    trace = []
+
+    # 调用通义千问，让 AI 生成工具调用
+    response = Generation.call(
+        model="qwen-plus",
+        messages=step_messages,
+        tools=ALL_TOOLS,
+        tool_choice="auto",
+        result_format="message"
+    )
+
+    if response.status_code != 200:
+        error_msg = f"API 调用失败: {response.message}"
+        return {
+            "type": "step_result",
+            "step": step_num,
+            "step_name": step_name,
+            "tool": tool_name,
+            "tool_args": {},
+            "result": error_msg,
+            "trace": [{"step": step_num, "error": error_msg}],
+            "success": False
+        }
+
+    message = response.output.choices[0].message
+
+    # 检查是否调用了工具
+    if message.get("tool_calls"):
+        for tool_call in message["tool_calls"]:
+            func_name = tool_call["function"]["name"]
+            func_args_str = tool_call["function"]["arguments"]
+            try:
+                func_args = json.loads(func_args_str)
+            except json.JSONDecodeError:
+                func_args = {}
+
+            trace.append({
+                "step": step_num,
+                "action": "call_tool",
+                "tool": func_name,
+                "arguments": func_args
+            })
+
+            # 执行工具
+            result = execute_tool(func_name, func_args, token=token)
+
+            trace.append({
+                "step": step_num,
+                "action": "tool_result",
+                "tool": func_name,
+                "result_preview": result[:200] + "..." if len(result) > 200 else result
+            })
+
+            return {
+                "type": "step_result",
+                "step": step_num,
+                "step_name": step_name,
+                "tool": func_name,
+                "tool_args": func_args,
+                "result": result,
+                "trace": trace,
+                "success": True
+            }
+
+    # AI 没有调工具，可能是给了文字说明
+    return {
+        "type": "step_result",
+        "step": step_num,
+        "step_name": step_name,
+        "tool": tool_name,
+        "tool_args": {},
+        "result": message.get("content", "步骤执行完成，但未调用工具"),
+        "trace": trace,
+        "success": True
+    }
+
+
+def generate_summary(messages: list, plan: list, token: str = None) -> dict:
+    """
+    所有步骤执行完成后，生成总结。
+
+    参数：
+        messages: 完整对话历史
+        plan: 完整计划（含每步状态）
+
+    返回：
+        {
+            "type": "summary",
+            "summary": "总结文本"
+        }
+    """
+    # 构造计划摘要
+    plan_summary = "\n".join([
+        f"第{s['step']}步 [{s.get('status', 'completed')}]: {s['name']} - {s.get('description', '')}"
+        for s in plan
+    ])
+
+    summary_prompt = f"""所有计划步骤已执行完成。请根据对话历史和执行结果，用中文向用户总结：
+1. 完成了什么任务
+2. 每一步的关键结果
+3. 用户可以在哪里查看结果
+
+执行计划：
+{plan_summary}
+
+请直接给出总结，不要调工具。"""
+
+    summary_messages = list(messages)
+    summary_messages.append({"role": "system", "content": summary_prompt})
+
+    response = Generation.call(
+        model="qwen-plus",
+        messages=summary_messages,
+        result_format="message"
+    )
+
+    if response.status_code == 200:
+        summary = response.output.choices[0].message["content"]
+    else:
+        summary = "所有步骤已执行完成。"
+
+    return {
+        "type": "summary",
+        "summary": summary
+    }

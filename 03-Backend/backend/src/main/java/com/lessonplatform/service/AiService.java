@@ -129,6 +129,48 @@ public class AiService {
         }
     }
 
+    /**
+     * 调用 AI 服务 Agent 端点（阶段 3：支持 Planning 模式）
+     *
+     * @param messages 历史消息列表
+     * @param mode     模式：plan / execute_step / summary / null(旧模式)
+     * @param extra    额外参数（plan_step / plan / message）
+     * @return Agent 返回结果
+     */
+    public Map<String, Object> callAgent(List<Map<String, Object>> messages, String mode, Map<String, Object> extra) {
+        log.info("调用 Agent 端点（mode={}），消息数：{}", mode, messages != null ? messages.size() : 0);
+
+        try {
+            Map<String, Object> request = new HashMap<>();
+            if (messages != null) {
+                request.put("messages", messages);
+            }
+            if (mode != null) {
+                request.put("mode", mode);
+            }
+            if (extra != null) {
+                request.putAll(extra);
+            }
+
+            Map<String, Object> result = webClient.post()
+                    .uri("/api/agent/demo")
+                    .bodyValue(request)
+                    .retrieve()
+                    .bodyToMono(Map.class)
+                    .timeout(Duration.ofSeconds(180))
+                    .block();
+
+            log.info("Agent 调用完成（mode={}）", mode);
+            return result;
+        } catch (Exception e) {
+            log.error("Agent 调用失败（mode={}）", mode, e);
+            Map<String, Object> fallback = new HashMap<>();
+            fallback.put("type", "error");
+            fallback.put("message", "Agent 服务暂时不可用：" + e.getMessage());
+            return fallback;
+        }
+    }
+
     private Map<String, String> generateFallbackContent(Map<String, Object> params) {
         // 兜底内容必须使用五段式字段名（与 LessonService 的 containsKey 检查对齐），
         // 否则会出现"status=completed 但 lesson_content 表 0 条记录"的静默失败
