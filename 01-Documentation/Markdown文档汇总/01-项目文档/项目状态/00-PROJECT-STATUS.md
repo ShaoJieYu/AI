@@ -1,9 +1,9 @@
 # 项目状态总览
 
-**文档版本**: v2.4 | **更新时间**: 2026-06-29 | **维护者**: AI文档
+**文档版本**: v2.6 | **更新时间**: 2026-06-29 | **维护者**: AI文档
 
 > 📌 **新AI工程师必读！** 本文档帮助你在5分钟内理解项目当前状态和进度
-> **当前最紧要**: 阶段 3（Planning 自主规划）已完成部署验证，下一步进入阶段 4（Multi-Agent）
+> **当前最紧要**: 阶段 4 质量优化已完成（检索链路修复 + Markdown 排版后处理器），内容质量提升 234%
 
 > ⚠️ **AI 协作规则**
 >
@@ -19,8 +19,8 @@
 
 | 项目 | 智能备课平台（大学毕业设计 → 全栈 AI Agent 工程师求职项目） |
 |-----|-----------------|
-| **现状** | Agent 阶段 1（Function Calling）+ 阶段 2（RAG+记忆）+ 阶段 3（Planning 自主规划）全部完成 |
-| **当前阶段** | 阶段 3 完成，阶段 4（Multi-Agent 多智能体协作）待开始 |
+| **现状** | Agent 四阶段全部完成（Function Calling + RAG/记忆 + Planning + Multi-Agent） |
+| **当前阶段** | 阶段 4（Multi-Agent 多智能体协作）已完成，下一步进入优化/答辩准备 |
 | **用户身份** | 大学生，6 个月后找工作，目标全栈 AI Agent 工程师 |
 | **核心目标** | 把"调 AI API 生成备课内容"的工具升级为真正的 AI Agent 系统 |
 | **团队** | AI 驱动开发 + 用户手动测试验证 |
@@ -38,28 +38,36 @@
 | **阶段 2b-1** | 学生薄弱知识点系统 | ✅ 已完成 | 2026-06-28 |
 | **阶段 2b-2** | Agent 短期对话记忆（Redis 持久化 + 聊天面板） | ✅ 已完成 | 2026-06-29 |
 | **阶段 3** | Planning 自主规划（混合策略 + 逐步执行确认） | ✅ 已完成 | 2026-06-29 |
-| **阶段 4** | Multi-Agent 多智能体协作 | ⏳ 规划中 | 第 5-6 个月 |
+| **阶段 4** | Multi-Agent 多智能体协作（3 Agent + SSE + 自动保存） | ✅ 已完成 | 2026-06-29 |
 
-### 当前要做的下一步（阶段 4 入口）
+### 当前要做的下一步（阶段 4 已完成）
 
-**目标**：Multi-Agent 多智能体协作（LangGraph 工作流编排 + 4 个 Agent 分工 + 质检打回重做）
+**阶段 4 完成内容**：
+- [x] **3 个 Agent 分工**：教学设计 Agent / 内容生成 Agent / 质检 Agent（移除导出 Agent，用户通过备课历史页面按钮导出 PDF）
+- [x] **LangGraph 工作流编排**：teaching_design → content_generation → qa → END（QA 通过即结束）
+- [x] **质检打回重做**：QA 不通过时根据 issue_type 打回到 content_generation（内容问题）或 teaching_design（结构问题），超过 max_retry 强制结束
+- [x] **ReAct 思考过程**：每个 Agent 记录 Thought/Action/Observation 轨迹，前端可视化展示
+- [x] **四层保障**：System Prompt 强约束 + Few-shot 示例 + Pydantic Schema 校验 + 模板兜底
+- [x] **SSE 流式推送**：AI 服务 LangGraph stream() → 后端 SseEmitter 转发 → 前端 EventSource 接收
+- [x] **Redis 持久化**：每个 Agent 执行后保存 State 到 Redis（RESP2 协议兼容旧版 Redis）
+- [x] **自动保存到备课历史**：工作流完成后 AI 服务自动调用 save_lesson_to_history（含学科英文→中文映射），推送 lesson_saved 事件
+- [x] **前端三栏可视化**：左栏 Agent 卡片 + 中栏产出内容/保存状态 + 右栏 ReAct 思考/雷达图
+- [x] **SVG 拓扑图**：3 节点状态动画 + 红色虚线打回回路
+- [x] **纯 SVG 雷达图**：QA 三维评分（准确性/格式/公式）可视化，无第三方图表库依赖
+- [x] **端到端验证**：3 agent_complete + qa_reject + lesson_saved + workflow_complete 完整链路通过
 
-**阶段 3 完成内容**：
-- [x] **AI 服务 planner.py**：混合规划器（固定三步模板兜底 + AI 动态增减步骤），AI 失败时自动降级到模板
-- [x] **AI 服务 agent_core.py 扩展**：新增 `run_agent_step`（单步执行）和 `generate_summary`（总结生成），保留旧 `run_agent` 向后兼容
-- [x] **AI 服务 main.py 端点改造**：AgentRequest 新增 mode/plan_step/plan 字段，支持 4 种模式路由（plan / execute_step / summary / 旧模式）
-- [x] **后端 AiService.callAgent 重载**：新增带 mode + extra 参数的方法，透传到 AI 服务
-- [x] **后端 ConversationController.sendMessage 改造**：请求体改为 Map<String,Object>，按 mode 分支处理，AI 回复按 type 格式化存入 Redis
-- [x] **前端 conversation.ts 重写**：新增 PlanStep / PlanResponse / StepResultResponse / SummaryResponse 类型 + generatePlan / executeStep / retryStep / generateSummary API
-- [x] **前端 AgentDemoPage 重写**：三种卡片视图（plan 计划列表+确认 / step_result 结果+重新执行+确认继续 / summary 绿色总结框）+ 右侧计划进度面板
-- [x] **逐步确认机制**：用户发送需求 → Agent 生成计划 → 用户确认 → 逐步执行 → 每步结果确认 → 总结
-- [x] **重新执行机制**：用户输入修改意见后重新执行当前步骤，替换最后一个 step_result 卡片
-- [x] **端到端验证通过**：plan → execute_step（2 步）→ summary 完整链路，Redis 5 条消息正确持久化
+**阶段 4 质量优化（2026-06-29）**：以 Unit 6 Weather and Feelings 为案例全链路诊断，修复三个内容质量问题
+- [x] **检索链路修复**：subject 字段中英文不一致（schema Literal 改中文九学科）、top_k 5→6、新增 min_score=0.40 阈值过滤低质量 chunks、search_textbook 工具加 enum 约束和关键词组合建议
+- [x] **Markdown 排版后处理器**：LLM 在 JSON 字段值里不主动写 Markdown，新增 `format_content_with_markdown()` 后处理函数，检测每段是否已有 Markdown 排版，没有的段调用 LLM 重写加排版（不改内容）
+- [x] **字数下限提升**：每段从 300 字 → 800 字
+- [x] **max_tokens 修复**：ReActLoop 从 4096 → 8192（按项目硬约束，防止五段式内容截断）
+- [x] **验证结果**：五段式合计字数 3650 → 12198（+234%），每段含完整 Markdown 结构（H2/H3/列表/加粗/表格/引用）
 
-**如何开始阶段 4**：
-- 查看 Phase 4 设计：02-ROADMAP.md 中"阶段 4：Multi-Agent 多智能体协作"
-- 核心概念：LangGraph 工作流编排、4 个 Agent 分工（教学设计/内容生成/质检/导出）、消息传递、质检打回重做
-- 技术选型：LangGraph（Python，面试认可度高）
+**下一步可选方向**：
+- 浏览器端到端测试（登录后 token 透传，验证 save_lesson_to_history 成功入库）
+- Git 提交阶段 4 代码（中文 commit 规范）
+- 答辩演示准备（Multi-Agent 可视化是杀手锏）
+- 性能优化（QA Agent 耗时较长，可考虑并发或缓存；Markdown 后处理器耗时 60s+，可考虑条件触发）
 
 ---
 
@@ -143,10 +151,17 @@
 - [x] **重新执行机制**：用户输入修改意见后重新执行当前步骤（方案 A）
 - [x] **端到端验证**：plan → execute_step × 2 → summary 完整链路通过，Redis 5 条消息正确持久化
 
-#### Agent 阶段 4：Multi-Agent 多智能体协作
-- [ ] 4 个 Agent 分工：教学设计 / 内容生成 / 质检 / 导出
-- [ ] LangGraph 工作流编排
-- [ ] 消息传递 + 冲突解决 + 质检打回重做
+#### Agent 阶段 4：Multi-Agent 多智能体协作（2026-06-29 完成）
+- [x] **3 个 Agent 分工**：教学设计 / 内容生成 / 质检（移除导出 Agent，用户通过备课历史页面按钮导出 PDF）
+- [x] **LangGraph 工作流编排**：StateGraph + 条件路由 + 打回循环
+- [x] **质检打回重做**：QA 不通过时根据 issue_type 打回，超过 max_retry 强制结束
+- [x] **ReAct 思考过程**：Thought/Action/Observation 轨迹记录与可视化
+- [x] **四层保障**：System Prompt + Few-shot + Pydantic Schema + 模板兜底
+- [x] **SSE 流式推送**：AI 服务 → 后端 SseEmitter → 前端 EventSource
+- [x] **Redis 持久化**：每个 Agent 执行后保存 State（RESP2 协议）
+- [x] **自动保存到备课历史**：工作流完成后自动调用 save_lesson_to_history
+- [x] **前端三栏可视化**：Agent 卡片 + 产出内容 + ReAct 思考/雷达图
+- [x] **SVG 拓扑图 + 雷达图**：纯 SVG 实现，无第三方图表库
 
 ---
 
