@@ -1,5 +1,5 @@
 import { useState, useRef } from 'react';
-import { Card, Upload, Button, App, Spin, Typography, Empty, Modal } from 'antd';
+import { Card, Upload, Button, App, Spin, Typography, Empty, Modal, Select } from 'antd';
 import { InboxOutlined, FileImageOutlined, FilePdfOutlined, CheckCircleOutlined, BulbOutlined, BookOutlined, PlusOutlined } from '@ant-design/icons';
 import type { UploadFile } from 'antd/es/upload/interface';
 // @ts-ignore
@@ -7,7 +7,10 @@ import html2pdf from 'html2pdf.js';
 import { motion } from 'framer-motion';
 import dayjs from 'dayjs';
 import { homeworkApi } from '@/api/homework';
+import { studentApi } from '@/api/student';
 import type { HomeworkAnalysisRecord } from '@/types/homework';
+import { useQuery } from '@tanstack/react-query';
+import type { Student } from '@/types/student';
 
 const { Title } = Typography;
 
@@ -34,6 +37,13 @@ export default function HomeworkUploadPage() {
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewImage, setPreviewImage] = useState('');
   const [previewTitle, setPreviewTitle] = useState('');
+  const [selectedStudentId, setSelectedStudentId] = useState<number | null>(null);
+
+  const { data: studentsData } = useQuery({
+    queryKey: ['students'],
+    queryFn: () => studentApi.getStudents({ page: 1, pageSize: 200 }),
+  });
+  const students = (studentsData as any)?.data?.records ?? [];
 
   const handlePreview = async (file: UploadFile) => {
     if (!file.url && !file.preview && !file.thumbUrl && file.originFileObj) {
@@ -87,7 +97,7 @@ export default function HomeworkUploadPage() {
 
     try {
       setAnalyzing(true);
-      const record = await homeworkApi.analyzeHomework(files);
+      const record = await homeworkApi.analyzeHomework(files, selectedStudentId ?? undefined);
       setResult(record);
       message.success('错题分析完成');
     } catch (error: any) {
@@ -182,6 +192,24 @@ export default function HomeworkUploadPage() {
         }
       `}</style>
       <Card title="错题上传与分析" className="shadow-sm border-none rounded-xl">
+        <div className="mb-4">
+          <label className="block text-sm text-gray-500 mb-1">关联学生（可选）</label>
+          <Select
+            allowClear
+            showSearch
+            placeholder="选择学生，分析结果将自动同步到学生画像"
+            style={{ width: 320 }}
+            value={selectedStudentId}
+            onChange={setSelectedStudentId}
+            filterOption={(input, option) =>
+              (option?.label as string)?.toLowerCase().includes(input.toLowerCase())
+            }
+            options={students.map((s: Student) => ({
+              value: s.id,
+              label: `${s.name} - ${s.grade}${s.currentSubject ? ' · ' + s.currentSubject : ''}`,
+            }))}
+          />
+        </div>
         <Upload
           name="images"
           multiple

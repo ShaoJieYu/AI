@@ -1,420 +1,265 @@
-# 项目发展规划 - Phase 2 及以后
+# Agent 升级路线图
 
-**文档版本**: v1.0 | **更新时间**: 2026-03-25
+**文档版本**: v2.5 | **更新时间**: 2026-06-29
 
-> 📋 本文档列出已规划但未实现的功能，按优先级和实现难度排序
+> 📋 本文档是项目核心任务线：把"调 AI API 生成备课内容"的工具升级为真正的 AI Agent 系统
+> **当前进度**: ✅ 阶段 1 + ✅ 阶段 2（RAG+记忆）+ ✅ 阶段 3（Planning）全部完成，⏳ 阶段 4（Multi-Agent）待开始
 
 ---
 
-## 规划总览
+## 背景
+
+用户是大学生，6 个月后找工作，目标全栈 AI Agent 工程师。当前项目是"调用 AI API 生成备课内容"的工具，要升级为真正的 AI Agent 系统。四大核心能力全做，边做边学，和 AI 协作完成。
+
+---
+
+## 路线图总览
 
 ```
-当前状态 (MVP)          Phase 2                      Phase 3
-Web + 基础AI    →     多端 + 高级服务      →     可观测性 + 规模化
-
-实现: 52%      实现: 52% + 35% = 87%     实现: 87% + 13% = 100%
-```
-
----
-
-## Phase 2: 多端应用和高级服务 (6-9个月)
-
-### P2.1 移动端应用 (优先级: 🔴 高)
-
-#### Flutter应用 (iOS/Android)
-- **预期工作量**: 3-4个月
-- **文档要求**: Flutter 3.x
-- **依赖**: 
-  - [ ] 后端API稳定性
-  - [ ] 用户认证系统完善
-  
-**关键任务**:
-- [ ] 搭建Flutter项目框架
-- [ ] 集成Dart HTTP客户端
-- [ ] 实现用户认证流程
-- [ ] 移植Web端核心页面
-- [ ] 测试和发布 (App Store + Google Play)
-
-**估算成本**: 
-- 初期构建: 4 周
-- 功能移植: 6 周  
-- 测试发布: 2 周
-
-**收益**: 支持iOS/Android用户
-
----
-
-#### 微信小程序 (Taro)
-- **预期工作量**: 2-3个月
-- **文档要求**: Taro 4.x
-- **依赖**: 
-  - [ ] 后端API完善
-  - [ ] 登录授权流程完善
-
-**关键任务**:
-- [ ] 搭建Taro项目框架
-- [ ] 集成微信登录授权
-- [ ] 实现支付功能 (可选)
-- [ ] 优化小程序性能
-- [ ] 提交微信审核
-
-**估算成本**:
-- 初期构建: 2 周
-- 功能实现: 4 周
-- 审核优化: 2 周
-
-**收益**: 微信生态用户，无需安装App
-
----
-
-### P2.2 AI服务升级 (优先级: 🟡 中)
-
-#### LangChain框架集成
-- **预期工作量**: 2-3周
-- **文档要求**: LangChain 0.1.x
-
-**关键任务**:
-- [ ] 安装LangChain依赖
-- [ ] 设计Prompt模板管理
-- [ ] 实现通义千问的LangChain集成
-- [ ] 添加缓存和成本优化
-- [ ] 单元测试
-
-**收益**: 统一的Prompt管理框架，便于迭代
-
----
-
-#### 多模型支持
-- **预期工作量**: 2-3周
-- **支持模型**: 文心一言 + GLM-4 + 通义千问
-
-**关键任务**:
-- [ ] 封装模型调用接口 (策略模式)
-- [ ] 集成百度文心一言SDK
-- [ ] 集成智谱GLM-4 SDK
-- [ ] 实现模型轮转/备用逻辑
-- [ ] 成本统计
-
-**收益**: 降低单一模型依赖，提高稳定性
-
----
-
-#### 向量知识库 (Milvus + LangChain)
-- **预期工作量**: 4-6周
-- **文档要求**: Milvus 2.4.x
-
-**关键任务**:
-- [ ] 部署Milvus向量数据库
-- [ ] 设计知识点向量化方案
-- [ ] 实现文档分割和嵌入
-- [ ] 实现相似度检索 (RAG)
-- [ ] 集成到备课生成流程
-- [ ] 性能优化和缓存
-
-**收益**: 支持个性化知识库，提高内容质量
-
-**依赖**:
-- [ ] LangChain框架集成 (P2.2.1)
-- [ ] 嵌入模型选择
-
----
-
-### P2.3 基础设施升级 (优先级: 🟡 中)
-
-#### 文件存储 (MinIO/OSS)
-- **预期工作量**: 1-2周
-- **文档要求**: MinIO 2023+ 或 阿里OSS
-
-**关键任务**:
-- [ ] 选择MinIO或云OSS
-- [ ] 部署或开通服务
-- [ ] 后端集成SDK
-- [ ] 上传下载接口
-- [ ] 访问控制和签名
-
-**收益**: 支持课件、素材等文件管理
-
-**建议**: 生产环境优先使用阿里OSS或AWS S3
-
----
-
-#### 高级搜索 (Meilisearch)
-- **预期工作量**: 2-3周
-- **文档要求**: Meilisearch 1.6.x
-
-**关键任务**:
-- [ ] 部署Meilisearch服务
-- [ ] 设计搜索索引策略
-- [ ] 集成到资源服务
-- [ ] 实现联想输入
-- [ ] 排序和过滤
-
-**收益**: 提升用户搜索体验
-
-**建议**: 非核心功能，可延后
-
----
-
-#### 分库分表 (ShardingSphere)
-- **预期工作量**: 3-4周
-- **文档要求**: ShardingSphere 5.0.x
-
-**关键任务**:
-- [ ] 分析数据增长趋势，确定分片键
-- [ ] 集成ShardingSphere-JDBC
-- [ ] 数据迁移方案设计
-- [ ] 灰度迁移执行
-- [ ] 测试和监控
-
-**收益**: 支持大数据量和高并发
-
-**建议**: 数据量 > 1000万条后再考虑
-
-**优先级**: 🔵 低 (当前数据量不需要)
-
----
-
-#### 消息队列 (RocketMQ)
-- **预期工作量**: 2-3周
-- **文档要求**: RocketMQ 5.x
-
-**关键任务**:
-- [ ] 部署RocketMQ Broker集群
-- [ ] 设计消息主题和队列
-- [ ] 生产者端集成
-- [ ] 消费者端实现 (异步处理)
-- [ ] 监控和告警
-
-**收益**: 异步处理能力，解耦服务
-
-**建议**: 并发请求 > 1000/秒后考虑
-
----
-
-### P2.4 服务治理完善 (优先级: 🔵 低)
-
-#### 分布式事务 (Seata)
-- **预期工作量**: 2-3周
-- **文档要求**: Seata 2.x
-
-**关键任务**:
-- [ ] 部署Seata Server
-- [ ] 配置AT模式或TCC模式
-- [ ] 标注事务方法 (@GlobalTransactional)
-- [ ] 测试异常场景
-- [ ] 性能基准测试
-
-**收益**: 跨服务操作原子性
-
-**优先级**: 🔵 低 (应用层补偿可满足当前需求)
-
----
-
-## Phase 3: 生产准备和规模化 (3-6个月)
-
-### P3.1 可观测性栈 (优先级: 🟡 中)
-
-#### 链路追踪 (SkyWalking/Jaeger)
-- **预期工作量**: 2-3周
-- **文档要求**: SkyWalking 9.x
-
-**关键任务**:
-- [ ] 部署SkyWalking后端
-- [ ] 集成Java Agent (自动探针)
-- [ ] 配置采样策略
-- [ ] 前端集成 (可选)
-- [ ] 性能影响评估
-
-**收益**: 完整的请求链路追踪
-
----
-
-#### 日志收集 (ELK Stack)
-- **预期工作量**: 3-4周
-- **文档要求**: ELK 8.x
-
-**关键任务**:
-- [ ] 部署Elasticsearch + Kibana
-- [ ] 部署Logstash或Filebeat
-- [ ] 配置日志采集规则
-- [ ] 设计索引和保留策略
-- [ ] 创建可视化仪表板
-
-**收益**: 集中式日志查询和分析
-
----
-
-#### 监控告警 (Prometheus/Grafana)
-- **预期工作量**: 2-3周
-
-**关键任务**:
-- [ ] 部署Prometheus采集器
-- [ ] 配置Java应用Metrics导出
-- [ ] 部署Grafana仪表板
-- [ ] 设置告警规则
-- [ ] 集成告警通知 (钉钉/邮件)
-
-**收益**: 实时性能和资源监控
-
----
-
-### P3.2 容器化和编排 (优先级: 🟡 中)
-
-#### Docker容器化
-- **预期工作量**: 1-2周
-
-**关键任务**:
-- [ ] 编写Dockerfile (Web + 后端 + AI)
-- [ ] 优化镜像大小
-- [ ] Docker Compose本地编排
-- [ ] 镜像仓库配置
-- [ ] 镜像版本管理
-
-**收益**: 统一部署和运行环境
-
----
-
-#### Kubernetes编排
-- **预期工作量**: 3-4周
-- **文档要求**: Kubernetes 1.28+
-
-**关键任务**:
-- [ ] 编写Deployment和Service
-- [ ] 配置资源限制和探针
-- [ ] 实现自动扩缩容
-- [ ] 配置Ingress路由
-- [ ] 持久化存储配置
-- [ ] 蓝绿/灰度部署
-
-**收益**: 自动化和高可用
-
-**优先级**: 🔵 低 (小规模可用Docker Compose)
-
----
-
-### P3.3 安全强化 (优先级: 🟡 中)
-
-**关键任务**:
-- [ ] OAuth2/OIDC社交登录
-- [ ] API请求签名验证
-- [ ] 数据加密 (敏感字段)
-- [ ] SQL注入防护审计
-- [ ] CSRF/XSS防护强化
-- [ ] 定期安全扫描
-
-**预期工作量**: 2-3周
-
----
-
-## 优先级矩阵
-
-```
-高影响 ┌─────────────────────────────────────┐
-      │  ▲ 向量知识库 (P2.2.3)              │
-      │  ▲ Flutter应用 (P2.1)                │
-      │  ▲ 文件存储 (P2.3.1)                │
-      │  ▲ 可观测性栈 (P3.1)                │
-      │      ▲ 小程序 (P2.1.2)              │
-      │      ▲ LangChain (P2.2.1)           │
-      │          ▲ 多模型 (P2.2.2)           │
-      │          ▲ 容器化 (P3.2)             │
-      │              ▲ 搜索引擎 (P2.3.2)    │
-低影响 │                  ▲ K8s (P3.2.2)    │
-      │                  ▲ 分库分表 (P2.3.4)│
-      │                  ▲ Seata (P2.4)    │
-      └─────────────────────────────────────┘
-       容易实现            难以实现
+阶段 1 (第1月)        阶段 2 (第2月)        阶段 3 (第3-4月)      阶段 4 (第5-6月)
+Function Calling  →   RAG + 记忆        →   Planning          →   Multi-Agent
+✅ 已完成              ✅ 已完成              ✅ 已完成              ⏳ 规划中
+
+AI 自主调用工具        AI 有长期记忆和        AI 自主规划教学        多个 Agent 分工
+                      知识库                路径                  协作完成复杂任务
 ```
 
 ---
 
-## 时间规划
+## 阶段 1：Function Calling 工具调用 ✅ 已完成
 
-```
-Q1 2026 | Q2 2026  | Q3 2026  | Q4 2026+
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-现状    | Phase 2  | Phase 2  | Phase 3
-MVP     | 继续     | 多端推出 | 生产准备
-        | 开发     |          |
-```
+**完成时间**: 2026-06-28
 
-**建议里程碑**:
-1. **Q2 2026** - LangChain + 向量知识库 (核心AI升级)
-2. **Q3 2026** - Flutter + 小程序 (多端上线)
-3. **Q4 2026** - 可观测性 + 容器化 (生产准备)
+### 目标
+把"代码硬编码调 AI"升级成"AI 自主决定调用什么工具"
 
----
+### 改动前 vs 改动后
+- **改动前**：用户点"生成备课" → 代码调 generate_lesson() → AI 返回 → 存库（流程写死）
+- **改动后**：用户说"帮我备一节静电场的课" → AI 自主决策：search_textbook → generate_lesson → save_lesson_to_history
 
-## 依赖关系图
+### 已实现
+- [x] Agent 核心模块：`agent/tools.py` + `agent/tool_executor.py` + `agent/agent_core.py`
+- [x] 3 个工具：search_textbook / generate_lesson / save_lesson_to_history
+- [x] Agent Loop 决策循环（最大 10 轮，含 trace 记录）
+- [x] token 透传链路（前端 → AI 服务 → 后端）
+- [x] Agent 端点 `POST /api/agent/demo`
+- [x] 入库接口 `POST /lessons/save`（不重复调 AI）
+- [x] 前端测试页 AgentDemoPage（自然语言输入 + Steps 决策可视化）
+- [x] 备课历史删除按钮（Popconfirm 确认）
 
-```
-AI升级
-├─ LangChain (P2.2.1)
-├─ 多模型支持 (P2.2.2)
-│  └─ 向量知识库 (P2.2.3) ← 依赖LangChain
-│     └─ 文件存储 (P2.3.1) ← 依赖向量库
+### 技术选型
+- 通义千问 qwen-plus 原生 Function Calling
+- JSON Schema 工具定义
+- Python dashscope SDK
 
-移动应用
-├─ Flutter (P2.1.1)
-└─ 小程序 (P2.1.2)
-   └─ 支付功能 (可选)
+### 验证结果
+用户输入"帮我备一节静电场的物理课，难度中等，45分钟"
+→ Agent 自主 3 步决策：search_textbook → generate_lesson → save_lesson_to_history
+→ 备课记录自动入库，可在备课历史页面查看/删除/导出 PDF
 
-基础设施
-├─ 文件存储 (P2.3.1)
-├─ 搜索引擎 (P2.3.2)
-├─ 分库分表 (P2.3.4) ← 依赖业务量增长
-└─ 消息队列 (P2.3.5)
-
-可观测性
-├─ 链路追踪 (P3.1.1)
-├─ 日志收集 (P3.1.2)
-└─ 监控告警 (P3.1.3)
-
-容器化
-├─ Docker (P3.2.1)
-└─ K8s (P3.2.2) ← 依赖Docker
-
-功能完善度时间线:
-                    
-当前:     |█████░░░░░░░░░░░░░░| 52%
-Q2 2026:  |████████████░░░░░░░| 70%
-Q3 2026:  |█████████████████░░| 87%
-Q4 2026:  |██████████████████░| 95%
-Q1 2027:  |███████████████████| 100%
-```
+### 详细排查记录
+见 [Agent阶段1升级与联调排查记录.md](../../08-工作文档/Agent阶段1升级与联调排查记录.md)
 
 ---
 
-## 执行建议
+## 阶段 2：RAG 检索增强 + 记忆 ✅ 已完成
 
-### 立即可做 (无依赖)
-1. ✅ LangChain框架集成 (2-3周)
-2. ✅ 文件存储选择和集成 (1-2周)
-3. ✅ 可观测性规划和方案设计
+**预计时间**: 第 2 个月
+**阶段 2a（教材知识库）已完成**: 2026-06-28
+**阶段 2b-1（学生薄弱知识点系统）已完成**: 2026-06-28
+**阶段 2b-2（Agent 短期对话记忆）已完成**: 2026-06-29
+**阶段 3（Planning）已完成**: 2026-06-29
 
-### 需要等待的
-- 向量知识库 ← 等LangChain完成
-- 小程序 ← 等后端API稳定
-- K8s ← 等Docker完成
+### 目标
+给 AI 注入长期记忆和知识库
 
-### 不急的 (可推后)
-- 分库分表 (数据量 > 1000万)
-- Seata (跨服务事务问题出现后)
-- K8s (小规模可用Docker Compose)
+### 已完成（阶段 2a：教材知识库）
+- [x] **Chroma 向量数据库集成**：PersistentClient 本地持久化，collection 按学科隔离
+- [x] **PDF 提取与清洗**：PyMuPDF（fitz）逐页提取，去页眉页脚、合并断行
+- [x] **文本切分**：chunk_size=500 / overlap=50，按自然段落/句子边界切分
+- [x] **通义千问 text-embedding-v2 向量化**：入库和检索统一使用，中文+英文混合效果好
+- [x] **RAG pipeline**：提取 → 切分 → 向量化 → 检索 → 注入 prompt 全链路跑通
+- [x] **替换 search_textbook 为真实检索**：从 mock 字典切换为 Chroma query
+- [x] **试点教材入库**：人教版七年级下册英语（129 页 → 401 个 chunk）
+- [x] **空库友好兜底**：collection 不存在或检索结果为空时返回明确提示
+
+### 已完成（阶段 2b-1：学生薄弱知识点系统）
+- [x] **新表 student_weak_point**：结构化存储薄弱知识点（学科/知识点名/掌握程度/来源/备注）
+- [x] **后端 CRUD 接口**：/students/{id}/weak-points（查/增/改/删）
+- [x] **错题分析自动采集**：HomeworkAnalysisRecord 加 studentId，分析完成后自动提取知识点创建薄弱点
+- [x] **前端学情分析 Tab**：展示真实薄弱点列表 + 手动添加/编辑/删除（弹窗表单）
+- [x] **错题页学生选择器**：选择学生后分析结果自动同步到该生画像
+- [x] **备课注入薄弱点**：LessonGeneratePage Step1 展示薄弱点摘要，customRequirements 注入薄弱点
+- [x] **AI 服务接收 weak_points**：tongyi_service.py prompt 注入薄弱点指导备课侧重
+- [x] **后端注入链路**：LessonService → AiService → AI 服务完整链路打通
+
+### 部署验证（2026-06-29）
+- [x] SQL 迁移脚本已执行（student_weak_point 表已建 + homework_analysis_record 已加 student_id）
+- [x] AI 服务（uvicorn port 8001）已重启运行
+- [x] 后端（Spring Boot port 8080）已重启运行
+
+### 已完成（阶段 2b-2：Agent 短期对话记忆）
+- [x] **后端 ConversationService**：Redis 持久化会话，消息增删查 + 24h TTL 自动过期
+- [x] **后端 ConversationController**：4 个端点的 REST API
+- [x] **后端 AiService.callAgent**：消息列表代理到 AI 服务
+- [x] **AI 服务多轮对话支持**：agent_core.py 和 main.py 接受 messages 列表
+- [x] **前端聊天面板**：消息气泡 + 右侧决策轨迹面板 + 新建/删除会话
+- [x] **Redis 持久化验证**：多轮消息（user→assistant→user→assistant）完整读写
+
+### 阶段 3（Planning 自主规划）已完成 — 详见下方阶段 3 章节
+- [x] **混合规划策略**：模板兜底 + AI 动态增减
+- [x] **逐步执行确认**：每步结果用户确认后再继续
+- [x] **重新执行机制**：用户反馈后重新执行当前步骤
+
+### 技术选型
+| 能力 | 选型 | 理由 |
+|------|------|------|
+| 向量数据库 | Chroma | 本地文件存储，零运维 |
+| Embedding | 通义千问 text-embedding-v2 | 和现有 dashscope SDK 一致，中文+英文效果好 |
+
+### 要学的概念
+- Embedding（文本向量化）✅ 已掌握
+- Chroma 向量库基本操作（collection / add / query）✅ 已掌握
+- RAG pipeline（切分 → 向量化 → 检索 → 注入 prompt）✅ 已掌握
+- Memory 设计（短期对话内 + 长期跨会话）⏳ 待学习
+
+### 产出预期
+- [x] search_textbook 工具返回真实教材内容（不再是静态模拟数据）
+- [ ] Agent 能基于学生历史记忆做个性化推荐
+
+### 验证结果
+用户输入"帮我备一节一般过去时的英语课，中等难度，45分钟"
+→ Agent search_textbook 从 Chroma 检索到第 101-103 页真实语法内容（相似度 0.68）
+→ 基于真实教材生成完整五段式备课内容
+→ 验证通过
 
 ---
 
-## 成功标准
+## 阶段 3：Planning 自主规划 ✅ 已完成
 
-- [ ] Phase 2完成时，功能完整度达到87%
-- [ ] 移动应用上线 (Flutter + 小程序)
-- [ ] AI服务支持向量知识库检索
-- [ ] 可观测性栈部署完整
-- [ ] 支持万级并发用户
+**预计时间**: 第 3-4 个月
+**完成时间**: 2026-06-29
+
+### 目标
+AI 先制定计划再逐步执行，支持用户逐步确认和重新执行，实现 Plan-and-Execute 任务拆解
+
+### 设计决策（边推进边讲解）
+1. **交互模式选择**：每步执行后用户确认再继续（而非一次性执行完所有步骤），让用户保持控制权
+2. **重新执行机制**：方案 A — 用户输入修改意见后重新执行当前步骤，替换最后一个 step_result 卡片
+3. **规划策略选择**：混合策略 C — 固定三步模板兜底（检索教材→生成内容→保存历史）+ AI 动态增减步骤，AI 失败时自动降级到模板
+
+### 已实现
+- [x] **混合规划器 planner.py**：BASE_LESSON_PLAN_STEPS 固定三步模板 + PLANNER_PROMPT 让 AI 在模板基础上动态增减，generate_plan(user_message) 返回 {type: "plan", plan: [...], user_message}
+- [x] **单步执行 run_agent_step**：构造 STEP_EXECUTION_PROMPT 告诉 AI"现在执行第 N 步：{step_name}"，只调用一个工具就返回 {type: "step_result", step, step_name, tool, tool_args, result, trace, success}
+- [x] **总结生成 generate_summary**：所有步骤完成后调用 AI 生成 {type: "summary", summary}
+- [x] **后端 mode 透传**：AiService.callAgent(messages, mode, extra) 重载方法，支持 plan/execute_step/summary 三种模式
+- [x] **ConversationController 改造**：sendMessage 请求体改为 Map<String,Object>，按 mode 分支构造 extra 参数，AI 回复按 type 格式化存入 Redis
+- [x] **前端三种卡片视图**：plan（计划列表+确认按钮）/ step_result（结果+进度+重新执行+确认继续）/ summary（绿色总结框）
+- [x] **前端状态管理**：currentPlan、currentStepIndex、retryInput、retrying
+- [x] **逐步确认流程**：handleSend → generatePlan → handleConfirmPlan → executeStep → handleConfirmStep → handleGenerateSummary
+- [x] **重新执行 handleRetryStep**：用户输入修改意见后重新执行当前步骤，替换最后一个 step_result 卡片
+- [x] **右侧计划进度面板**：Steps 展示当前计划执行进度
+
+### 三种响应类型
+| type | 触发时机 | 包含字段 |
+|------|----------|----------|
+| plan | mode="plan" | plan[], user_message |
+| step_result | mode="execute_step" | step, step_name, tool, tool_args, result, trace, success |
+| summary | mode="summary" | summary |
+
+### 验证结果（2026-06-29）
+用户输入"帮我准备一节物理课，主题是静电场，难度中等，时长45分钟"
+- generatePlan 返回三步计划（检索教材→生成五段式内容→保存历史）
+- executeStep 第1步：search_textbook 调用成功（物理教材未入库，返回明确提示）
+- executeStep 第2步：generate_lesson 调用成功，返回完整五段式教案（库仑定律、电场强度、例题推导）
+- generateSummary 返回完整中文总结（任务概述+每步关键结果+查看方式）
+- Redis 持久化 5 条消息，history 查询正常
+
+### 技术选型
+| 能力 | 选型 | 理由 |
+|------|------|------|
+| 规划策略 | 混合（模板+AI） | 模板保证基础流程不丢，AI 增加灵活性 |
+| 交互模式 | 逐步确认 | 用户保持控制权，每步可重新执行 |
+| 重新执行 | 替换最后卡片 | 简单可靠，保留历史轨迹 |
+
+### 要学的概念
+- Plan-and-Execute 模式 ✅ 已掌握
+- 任务拆解策略（固定模板 + 动态增减）✅ 已掌握
+- 反馈循环设计（逐步确认 + 重新执行）✅ 已掌握
+
+### 产出预期
+- [x] 输入备课需求，AI 自主输出三步计划并逐步执行
+- [x] 每步结果用户确认后再继续，支持重新执行
+
+---
+
+## 阶段 4：Multi-Agent 多智能体协作 ⏳ 规划中
+
+**预计时间**: 第 5-6 个月
+
+### 目标
+多个 Agent 分工协作完成复杂任务
+
+### 四个 Agent 分工
+| Agent | 职责 |
+|-------|------|
+| 教学设计 Agent | 拆解教学目标 |
+| 内容生成 Agent | 生成五段式内容 |
+| 质检 Agent | 准确性 + 排版 + 公式校验（不合格打回重做） |
+| 导出 Agent | PDF + 排版优化 |
+
+### 待实现
+- [ ] 4 个 Agent 角色分工
+- [ ] LangGraph 工作流编排
+- [ ] 消息传递机制
+- [ ] 冲突解决策略
+- [ ] 质检打回重做循环
+
+### 要学的概念
+- LangGraph（或 CrewAI / AutoGen）
+- 角色分工和消息传递
+- 冲突解决
+- 工作流编排（DAG / 状态机）
+
+### 技术选型
+- **LangGraph**（Python，面试认可度高，比 LangChain 灵活，适合自定义工作流）
+
+### 产出预期
+- 多个 Agent 协作完成备课全流程
+- 质检 Agent 不合格会打回内容生成 Agent 重做
+
+---
+
+## 技术栈总览
+
+| 能力 | 选型 | 理由 |
+|------|------|------|
+| Agent 框架 | LangGraph | 比 LangChain 灵活，适合自定义工作流 |
+| 向量数据库 | Chroma | 本地文件存储，零运维 |
+| Embedding | 通义千问 text-embedding-v2 | 和现有 dashscope SDK 一致 |
+| Function Calling | 通义千问 qwen-plus | 已有模型，原生支持 |
+| 前端可视化 | 现有 React + Ant Design | 加"Agent 思考过程"可视化面板 |
+
+---
+
+## 简历话术（目标）
+
+> 我的毕设是一个基于 Multi-Agent 的智能备课平台。系统由 4 个 Agent（教学设计 / 内容生成 / 质检 / 导出）通过 LangGraph 编排协作完成。每个 Agent 能自主调用工具，基于 RAG 检索教材知识库生成内容，并通过 ReAct 模式根据学情反馈自主规划教学路径。技术栈：Python + LangGraph + Chroma + 通义千问 + Spring Boot + React。
+
+---
+
+## Git 工作流规范
+
+每个阶段按企业级规范提交：
+- 分支命名：`feat/agent-stageN-xxx`（如 `feat/agent-stage1-function-calling`）
+- Conventional Commits 格式：`<type>(<scope>): <subject>`
+- type 白名单：feat / fix / docs / style / refactor / perf / test / build / ci / chore / revert / wip
+- commit-msg hook + pre-commit hook 已配置
+- main 分支禁止直接 push，必须通过 PR 合并（GitHub 端 Branch Protection 规则）
 
 ---
 
 ## 相关文档
-- [00-PROJECT-STATUS.md](./00-PROJECT-STATUS.md) - 项目当前状态
-- [01-ARCHITECTURE-ACTUAL.md](./01-ARCHITECTURE-ACTUAL.md) - 实现架构详情
-- [DESIGN.md](../DESIGN.md) - 原始设计文档
+- [00-PROJECT-STATUS.md](./00-PROJECT-STATUS.md) - 项目当前状态总览
+- [Agent阶段1升级与联调排查记录.md](../../08-工作文档/Agent阶段1升级与联调排查记录.md) - 阶段 1 完整排查记录
+- [INDEX.md](../导航索引/INDEX.md) - 文档导航索引

@@ -22,7 +22,9 @@ public class HomeworkAnalysisController {
     private final HomeworkAnalysisService homeworkAnalysisService;
 
     @PostMapping("/analyze")
-    public Result<HomeworkAnalysisRecord> analyzeHomeworkImages(@RequestParam("images") MultipartFile[] images) {
+    public Result<HomeworkAnalysisRecord> analyzeHomeworkImages(
+            @RequestParam("images") MultipartFile[] images,
+            @RequestParam(value = "studentId", required = false) Long studentId) {
         try {
             List<String> base64Images = new ArrayList<>();
             for (MultipartFile file : images) {
@@ -36,7 +38,7 @@ public class HomeworkAnalysisController {
                 return Result.error("No images provided");
             }
 
-            HomeworkAnalysisRecord record = homeworkAnalysisService.analyzeAndSave(base64Images);
+            HomeworkAnalysisRecord record = homeworkAnalysisService.analyzeAndSave(base64Images, studentId);
             return Result.success("分析成功", record);
         } catch (Exception e) {
             log.error("Failed to analyze homework images", e);

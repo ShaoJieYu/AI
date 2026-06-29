@@ -89,3 +89,17 @@ export interface CreateStudentRequest {
 export interface UpdateStudentRequest extends Partial<CreateStudentRequest> {
   status?: 'active' | 'paused' | 'finished';
 }
+
+// 学生薄弱知识点（阶段 2b-1）
+export interface StudentWeakPoint {
+  id: number;
+  studentId: number;
+  subject: string;
+  knowledgePoint: string;
+  masteryLevel: 'WEAK' | 'MEDIUM' | 'STRONG';
+  source: 'ERROR_ANALYSIS' | 'MANUAL';
+  sourceId?: number;
+  notes?: string;
+  createdAt: string;
+  updatedAt: string;
+}

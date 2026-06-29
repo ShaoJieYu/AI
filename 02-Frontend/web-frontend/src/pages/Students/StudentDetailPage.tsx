@@ -1,10 +1,12 @@
 import { useParams, useNavigate } from 'react-router-dom';
-import { Card, Descriptions, Tag, Button, Tabs, Timeline, Progress } from 'antd';
-import { EditOutlined, ArrowLeftOutlined, BookOutlined } from '@ant-design/icons';
-import { useQuery } from '@tanstack/react-query';
+import { Card, Descriptions, Tag, Button, Tabs, Timeline, Progress, Modal, Form, Select, Input, Popconfirm, Empty, Alert, message } from 'antd';
+import { EditOutlined, ArrowLeftOutlined, BookOutlined, PlusOutlined, DeleteOutlined } from '@ant-design/icons';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { studentApi } from '@/api/student';
 import { lessonApi } from '@/api/lesson';
 import dayjs from 'dayjs';
+import { useState } from 'react';
+import type { StudentWeakPoint } from '@/types/student';
 
 export default function StudentDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -39,6 +41,95 @@ export default function StudentDetailPage() {
   const profile = profileData?.data;
   const goals = goalsData?.data || [];
   const lessons = lessonsData?.data || [];
+
+  // ===== 薄弱知识点（阶段 2b-1） =====
+  const queryClient = useQueryClient();
+  const [wpModalOpen, setWpModalOpen] = useState(false);
+  const [editingWp, setEditingWp] = useState<StudentWeakPoint | null>(null);
+  const [wpForm] = Form.useForm();
+
+  const { data: weakPoints = [] } = useQuery({
+    queryKey: ['studentWeakPoints', studentId],
+    queryFn: () => studentApi.getWeakPoints(studentId),
+    enabled: !!studentId,
+  });
+
+  const createWpMutation = useMutation({
+    mutationFn: (data: Parameters<typeof studentApi.createWeakPoint>[1]) =>
+      studentApi.createWeakPoint(studentId, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['studentWeakPoints', studentId] });
+      message.success('薄弱点添加成功');
+      setWpModalOpen(false);
+      wpForm.resetFields();
+    },
+    onError: (err: any) => {
+      message.error(err?.response?.data?.message || '添加失败');
+    },
+  });
+
+  const updateWpMutation = useMutation({
+    mutationFn: (data: { id: number; body: Parameters<typeof studentApi.updateWeakPoint>[2] }) =>
+      studentApi.updateWeakPoint(studentId, data.id, data.body),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['studentWeakPoints', studentId] });
+      message.success('薄弱点更新成功');
+      setWpModalOpen(false);
+      setEditingWp(null);
+      wpForm.resetFields();
+    },
+    onError: (err: any) => {
+      message.error(err?.response?.data?.message || '更新失败');
+    },
+  });
+
+  const deleteWpMutation = useMutation({
+    mutationFn: (id: number) => studentApi.deleteWeakPoint(studentId, id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['studentWeakPoints', studentId] });
+      message.success('薄弱点已删除');
+    },
+    onError: (err: any) => {
+      message.error(err?.response?.data?.message || '删除失败');
+    },
+  });
+
+  const handleWpSubmit = async () => {
+    const values = await wpForm.validateFields();
+    if (editingWp) {
+      updateWpMutation.mutate({ id: editingWp.id, body: values });
+    } else {
+      createWpMutation.mutate(values);
+    }
+  };
+
+  const openAddModal = () => {
+    setEditingWp(null);
+    wpForm.resetFields();
+    wpForm.setFieldsValue({ masteryLevel: 'WEAK', subject: student?.currentSubject || '' });
+    setWpModalOpen(true);
+  };
+
+  const openEditModal = (wp: StudentWeakPoint) => {
+    setEditingWp(wp);
+    wpForm.setFieldsValue(wp);
+    setWpModalOpen(true);
+  };
+
+  const masteryColorMap: Record<string, string> = {
+    WEAK: 'red',
+    MEDIUM: 'orange',
+    STRONG: 'green',
+  };
+  const masteryLabelMap: Record<string, string> = {
+    WEAK: '薄弱',
+    MEDIUM: '一般',
+    STRONG: '掌握',
+  };
+  const sourceLabelMap: Record<string, string> = {
+    ERROR_ANALYSIS: '错题分析',
+    MANUAL: '手动录入',
+  };
 
   const tabItems = [
     {
@@ -113,9 +204,6 @@ export default function StudentDetailPage() {
                 <Descriptions.Item label="薄弱科目" span={2}>
                   {profile.weakSubjects?.join('、') || '-'}
                 </Descriptions.Item>
-                <Descriptions.Item label="薄弱知识点" span={2}>
-                  {profile.weakKnowledge?.join('、') || '-'}
-                </Descriptions.Item>
                 <Descriptions.Item label="性格特点" span={2}>
                   {profile.personality?.description || (
                     <>
@@ -147,6 +235,58 @@ export default function StudentDetailPage() {
                   </Card>
                 ))}
               </div>
+
+              {/* 薄弱知识点区域 */}
+              <div className="flex items-center justify-between mt-8 mb-4">
+                <h4 className="text-base font-medium m-0">
+                  薄弱知识点
+                  <span className="text-sm text-gray-400 ml-2 font-normal">（{weakPoints.length} 条记录）</span>
+                </h4>
+                <Button type="primary" size="small" icon={<PlusOutlined />} onClick={openAddModal}>
+                  添加
+                </Button>
+              </div>
+
+              {weakPoints.length > 0 ? (
+                <div className="space-y-3">
+                  {weakPoints.map(wp => (
+                    <Card key={wp.id} size="small" className="border-gray-200">
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="font-medium text-gray-800">{wp.knowledgePoint}</span>
+                            <Tag color={masteryColorMap[wp.masteryLevel]}>
+                              {masteryLabelMap[wp.masteryLevel]}
+                            </Tag>
+                            <Tag>{wp.subject}</Tag>
+                            <Tag color={wp.source === 'ERROR_ANALYSIS' ? 'blue' : 'default'}>
+                              {sourceLabelMap[wp.source]}
+                            </Tag>
+                          </div>
+                          <div className="text-xs text-gray-400">
+                            发现时间：{dayjs(wp.createdAt).format('YYYY-MM-DD HH:mm')}
+                            {wp.notes && <span className="ml-4">备注：{wp.notes}</span>}
+                          </div>
+                        </div>
+                        <div className="flex gap-1 ml-2">
+                          <Button type="link" size="small" icon={<EditOutlined />}
+                            onClick={() => openEditModal(wp)} />
+                          <Popconfirm title="确认删除此薄弱点？" onConfirm={() => deleteWpMutation.mutate(wp.id)}>
+                            <Button type="link" size="small" danger icon={<DeleteOutlined />} />
+                          </Popconfirm>
+                        </div>
+                      </div>
+                    </Card>
+                  ))}
+                </div>
+              ) : (
+                <Alert
+                  message="暂无薄弱知识点记录"
+                  description="尚未记录该学生的薄弱知识点。可以通过「错题拍照分析」自动生成，或点击上方「添加」按钮手动录入。"
+                  type="info"
+                  showIcon
+                />
+              )}
             </>
           ) : (
             <div className="text-center text-gray-500 py-8">
@@ -222,6 +362,48 @@ export default function StudentDetailPage() {
       <Card bordered={false} className="shadow-sm">
         <Tabs items={tabItems} />
       </Card>
+
+      {/* 薄弱知识点新增/编辑弹窗 */}
+      <Modal
+        title={editingWp ? '编辑薄弱知识点' : '添加薄弱知识点'}
+        open={wpModalOpen}
+        onOk={handleWpSubmit}
+        onCancel={() => { setWpModalOpen(false); setEditingWp(null); wpForm.resetFields(); }}
+        confirmLoading={createWpMutation.isPending || updateWpMutation.isPending}
+      >
+        <Form form={wpForm} layout="vertical">
+          <Form.Item name="subject" label="学科" rules={[{ required: true, message: '请选择学科' }]}>
+            <Select
+              options={[
+                { value: '语文', label: '语文' },
+                { value: '数学', label: '数学' },
+                { value: '英语', label: '英语' },
+                { value: '物理', label: '物理' },
+                { value: '化学', label: '化学' },
+                { value: '生物', label: '生物' },
+                { value: '历史', label: '历史' },
+                { value: '地理', label: '地理' },
+                { value: '政治', label: '政治' },
+              ]}
+            />
+          </Form.Item>
+          <Form.Item name="knowledgePoint" label="知识点名称" rules={[{ required: true, message: '请输入知识点名称' }]}>
+            <Input placeholder="例如：一般过去时的动词变化规则" />
+          </Form.Item>
+          <Form.Item name="masteryLevel" label="掌握程度" rules={[{ required: true }]}>
+            <Select
+              options={[
+                { value: 'WEAK', label: '薄弱' },
+                { value: 'MEDIUM', label: '一般' },
+                { value: 'STRONG', label: '掌握' },
+              ]}
+            />
+          </Form.Item>
+          <Form.Item name="notes" label="备注">
+            <Input.TextArea rows={2} placeholder="可选，记录具体情况" />
+          </Form.Item>
+        </Form>
+      </Modal>
     </div>
   );
 }

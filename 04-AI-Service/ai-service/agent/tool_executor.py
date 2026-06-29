@@ -16,27 +16,24 @@ BACKEND_URL = "http://localhost:8080/api"
 
 def search_textbook(keyword: str, subject: str) -> str:
     """
-    搜索教材内容（阶段 1 用静态模拟数据，阶段 2 换成 RAG 检索）。
+    搜索教材内容（阶段 2 起改用 Chroma 向量库真实检索）。
+
+    从对应学科的 Chroma collection 中检索 top-5 相关片段，
+    每条带相似度分数、教材名、页码。如果该学科未入库，返回友好提示。
     """
-    # 模拟教材库
-    mock_textbook = {
-        "物理": {
-            "静电场": "【人教版高中物理选修3-1 第一章 静电场】电荷守恒定律：电荷既不会创生，也不会消灭，它只能从一个物体转移到另一个物体，或者从物体的一部分转移到另一部分；在转移过程中，电荷的总量保持不变。库仑定律：真空中两个静止点电荷之间的相互作用力，与它们的电荷量的乘积成正比，与它们的距离的二次方成反比。公式：F = k*q1*q2/r²，k=9.0×10⁹ N·m²/C²。",
-            "牛顿第二定律": "【人教版高中物理必修1 第四章 牛顿运动定律】牛顿第二定律：物体加速度的大小跟作用力成正比，跟物体的质量成反比，加速度的方向跟作用力的方向相同。公式：F = ma。",
-        },
-        "英语": {
-            "一般过去时": "【人教版初中英语八年级上册 Unit 11】一般过去时：表示过去某个时间发生的动作或存在的状态。基本结构：主语 + 动词过去式。规则动词过去式变化：①一般加-ed；②以e结尾加-d；③以辅音字母+y结尾，变y为i加-ed；④重读闭音节结尾双写末尾辅音字母加-ed。",
-            "现在完成时": "【人教版初中英语九年级 Unit 8】现在完成时：表示过去发生或已经完成的动作对现在造成的影响或结果。结构：have/has + 过去分词。",
-        }
-    }
-
-    subject_lib = mock_textbook.get(subject, {})
-    result = subject_lib.get(keyword)
-
-    if result:
-        return result
-    else:
-        return f"未找到{subject}学科中关键词为'{keyword}'的教材内容。可尝试的关键词：{list(subject_lib.keys())}"
+    try:
+        from rag.vector_store import search_as_text
+        return search_as_text(query=keyword, subject=subject, top_k=5)
+    except ImportError:
+        return (
+            f"【检索失败】RAG 模块未安装，请确保 rag/ 目录存在且依赖已安装。"
+            f"（查询：{subject} - {keyword}）"
+        )
+    except Exception as e:
+        return (
+            f"【检索出错】{subject} - {keyword}：{str(e)}。"
+            f"可能原因：向量库未初始化或 embedding 服务异常。"
+        )
 
 
 def generate_lesson(subject: str, teaching_goal: str,
