@@ -1,8 +1,10 @@
-import { Card, Tabs, Form, Input, Button, Avatar, Switch, Select, Upload, message } from 'antd';
-import { UserOutlined, LockOutlined, BellOutlined } from '@ant-design/icons';
+import { useState, useEffect } from 'react';
+import { Card, Tabs, Form, Input, Button, Avatar, Switch, Select, Upload, Radio, Tag, Spin, message } from 'antd';
+import { UserOutlined, LockOutlined, BellOutlined, RobotOutlined } from '@ant-design/icons';
 import { useAuthStore } from '@/stores/authStore';
 import { authApi } from '@/api/auth';
-import { useMutation } from '@tanstack/react-query';
+import { llmApi } from '@/api/llm';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { GRADE_OPTIONS, SUBJECT_OPTIONS } from '@/types/lesson';
 
 export default function SettingsPage() {
@@ -31,6 +33,51 @@ export default function SettingsPage() {
       message.error('密码修改失败');
     },
   });
+
+  // ===== LLM 模型切换 =====
+  const queryClient = useQueryClient();
+  const [selectedProvider, setSelectedProvider] = useState<string>();
+
+  const { data: providerRes, isLoading: providerLoading } = useQuery({
+    queryKey: ['llmProvider'],
+    queryFn: () => llmApi.getProvider(),
+  });
+
+  const { data: statusRes, isLoading: statusLoading } = useQuery({
+    queryKey: ['llmStatus'],
+    queryFn: () => llmApi.getStatus(),
+  });
+
+  const providerData = providerRes?.data;
+  const statusData = statusRes?.data;
+
+  useEffect(() => {
+    if (providerData?.current) {
+      setSelectedProvider(providerData.current);
+    }
+  }, [providerData?.current]);
+
+  const switchProviderMutation = useMutation({
+    mutationFn: (provider: string) => llmApi.switchProvider(provider),
+    onSuccess: (res) => {
+      if (res.data?.success) {
+        message.success(res.data?.message || '切换成功');
+        queryClient.invalidateQueries({ queryKey: ['llmProvider'] });
+        queryClient.invalidateQueries({ queryKey: ['llmStatus'] });
+      } else {
+        message.error(res.data?.message || '切换失败');
+      }
+    },
+    onError: () => {
+      message.error('切换失败');
+    },
+  });
+
+  const handleSwitchProvider = () => {
+    if (selectedProvider && selectedProvider !== providerData?.current) {
+      switchProviderMutation.mutate(selectedProvider);
+    }
+  };
 
   const tabItems = [
     {
@@ -236,6 +283,89 @@ export default function SettingsPage() {
                 </div>
               </div>
             </div>
+          </div>
+        </div>
+      ),
+    },
+    {
+      key: 'llm',
+      label: (
+        <span>
+          <RobotOutlined className="mr-1" />
+          AI 模型
+        </span>
+      ),
+      children: (
+        <div className="py-6">
+          <div className="max-w-2xl space-y-6">
+            {/* 当前模型 */}
+            <Card title="当前模型" size="small">
+              {statusLoading ? (
+                <div className="flex justify-center py-6">
+                  <Spin />
+                </div>
+              ) : statusData ? (
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="text-base font-medium">{statusData.label}</div>
+                    <div className="text-sm text-gray-500 mt-1">{statusData.description}</div>
+                    {statusData.detail ? (
+                      <div className="text-xs text-gray-400 mt-1">{statusData.detail}</div>
+                    ) : null}
+                  </div>
+                  <Tag color={statusData.reachable ? 'green' : 'red'}>
+                    {statusData.reachable ? '已连接' : '未连接'}
+                  </Tag>
+                </div>
+              ) : (
+                <div className="text-sm text-gray-400">暂无状态信息</div>
+              )}
+            </Card>
+
+            {/* 切换模型 */}
+            <Card title="切换模型" size="small">
+              {providerLoading ? (
+                <div className="flex justify-center py-6">
+                  <Spin />
+                </div>
+              ) : providerData ? (
+                <div className="space-y-4">
+                  <Radio.Group
+                    value={selectedProvider}
+                    onChange={(e) => setSelectedProvider(e.target.value)}
+                    className="w-full"
+                  >
+                    <div className="space-y-3">
+                      {Object.entries(providerData.providers).map(([key, info]) => (
+                        <div
+                          key={key}
+                          className={`flex items-start gap-3 p-4 border rounded-lg transition-colors ${
+                            selectedProvider === key ? 'border-blue-500 bg-blue-50' : 'border-gray-200'
+                          }`}
+                        >
+                          <Radio value={key} />
+                          <div>
+                            <div className="font-medium">{info.label}</div>
+                            <div className="text-sm text-gray-500 mt-1">{info.description}</div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </Radio.Group>
+                  {selectedProvider && selectedProvider !== providerData.current && (
+                    <Button
+                      type="primary"
+                      loading={switchProviderMutation.isPending}
+                      onClick={handleSwitchProvider}
+                    >
+                      切换到该模型
+                    </Button>
+                  )}
+                </div>
+              ) : (
+                <div className="text-sm text-gray-400">暂无可切换的模型</div>
+              )}
+            </Card>
           </div>
         </div>
       ),

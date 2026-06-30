@@ -171,6 +171,81 @@ public class AiService {
         }
     }
 
+    /**
+     * 获取当前 LLM Provider 及可选项列表
+     * GET /api/llm/provider → {current, providers}
+     */
+    public Map<String, Object> getLlmProvider() {
+        log.info("获取 LLM Provider 信息");
+        try {
+            Map<String, Object> result = webClient.get()
+                    .uri("/api/llm/provider")
+                    .retrieve()
+                    .bodyToMono(Map.class)
+                    .timeout(Duration.ofSeconds(10))
+                    .block();
+            log.info("LLM Provider 信息获取完成");
+            return result;
+        } catch (Exception e) {
+            log.error("获取 LLM Provider 失败", e);
+            Map<String, Object> fallback = new HashMap<>();
+            fallback.put("error", "获取 LLM Provider 失败：" + e.getMessage());
+            return fallback;
+        }
+    }
+
+    /**
+     * 切换 LLM Provider
+     * POST /api/llm/provider body={provider} → {success, current, message}
+     */
+    public Map<String, Object> switchLlmProvider(String provider) {
+        log.info("切换 LLM Provider：{}", provider);
+        try {
+            Map<String, Object> request = new HashMap<>();
+            request.put("provider", provider);
+
+            Map<String, Object> result = webClient.post()
+                    .uri("/api/llm/provider")
+                    .bodyValue(request)
+                    .retrieve()
+                    .bodyToMono(Map.class)
+                    .timeout(Duration.ofSeconds(10))
+                    .block();
+            log.info("LLM Provider 切换完成：{}", provider);
+            return result;
+        } catch (Exception e) {
+            log.error("切换 LLM Provider 失败：{}", provider, e);
+            Map<String, Object> fallback = new HashMap<>();
+            fallback.put("success", false);
+            fallback.put("message", "切换 LLM Provider 失败：" + e.getMessage());
+            return fallback;
+        }
+    }
+
+    /**
+     * 获取 LLM 状态
+     * GET /api/llm/status → {current, label, description, reachable, detail}
+     */
+    public Map<String, Object> getLlmStatus() {
+        log.info("获取 LLM 状态");
+        try {
+            Map<String, Object> result = webClient.get()
+                    .uri("/api/llm/status")
+                    .retrieve()
+                    .bodyToMono(Map.class)
+                    .timeout(Duration.ofSeconds(10))
+                    .block();
+            log.info("LLM 状态获取完成");
+            return result;
+        } catch (Exception e) {
+            log.error("获取 LLM 状态失败", e);
+            Map<String, Object> fallback = new HashMap<>();
+            fallback.put("reachable", false);
+            fallback.put("detail", "获取 LLM 状态失败：" + e.getMessage());
+            return fallback;
+        }
+    }
+
     private Map<String, String> generateFallbackContent(Map<String, Object> params) {
         // 兜底内容必须使用五段式字段名（与 LessonService 的 containsKey 检查对齐），
         // 否则会出现"status=completed 但 lesson_content 表 0 条记录"的静默失败
