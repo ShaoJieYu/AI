@@ -1,0 +1,34 @@
+{
+  "timing": {
+    "teaching_design": 21.109628500000326,
+    "content_generation": 61.941255899999305,
+    "qa": 7.190833700000439,
+    "total": 90.2417518000002
+  },
+  "total_chars": 9491,
+  "qa_result": {
+    "dimensions": {
+      "accuracy": {
+        "score": 88,
+        "threshold": 80,
+        "issues": []
+      },
+      "format": {
+        "score": 92,
+        "threshold": 75,
+        "issues": []
+      },
+      "formula": {
+        "score": 65,
+        "threshold": 80,
+        "issues": [
+          "问题1"
+        ]
+      }
+    },
+    "overall_pass": false,
+    "issue_type": "content",
+    "retry_suggestion": "具体修复建议：1) 修复公式 1; 2) 修复排版 2",
+    "forced_pass": false
+  }
+}

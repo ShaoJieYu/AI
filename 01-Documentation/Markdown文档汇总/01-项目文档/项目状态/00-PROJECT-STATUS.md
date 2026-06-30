@@ -1,9 +1,9 @@
 # 项目状态总览
 
-**文档版本**: v3.0 | **更新时间**: 2026-06-30 | **维护者**: AI文档
+**文档版本**: v3.4 | **更新时间**: 2026-07-01 | **维护者**: AI文档
 
 > 📌 **新AI工程师必读！** 本文档帮助你在5分钟内理解项目当前状态和进度
-> **当前最紧要**: Unit 参数三层保障已完成（主题词映射+冲突覆盖，100% 命中正确章节）
+> **当前最紧要**: 内容生成并发数已从硬编码 5路 改为按模型动态 2路，端到端耗时从 115s 降至 90s（提速 22%）
 
 > ⚠️ **AI 协作规则**
 >
@@ -86,11 +86,73 @@
 - [x] **迭代上限修复**：content_generation Agent 的 `max_iterations` 从 3 提升到 5，解决 LLM 用 3 次迭代全调 search_textbook 触发模板兜底问题
 - [x] **验证结果**：第五章抛体运动备课请求，2 次 search_textbook 全部命中物理教材（第3/5/19页），生成内容含教材原文引用+LaTeX公式+Markdown排版，耗时 124s
 
+**本地模型接入（2026-06-30）**：双 Provider 架构，云端通义千问与本地 Ollama 可切换
+- [x] **Ollama 安装**：v0.3.11 程序装在 `D:\Ollama\bin\`，Qwen2.5-7B（4.7GB）下载在 `D:\Ollama\blobs\`（D 盘，不占 C 盘）
+- [x] **硬件配置**：RTX 4060 Laptop 8GB 显存，CUDA v12，29/29 层全部 GPU offload，模型占用 4168 MiB 显存
+- [x] **LLM 层抽象**：`common/llm.py` 重构为 `BaseLLM` 抽象基类 + `QwenPlusLLM`（云端）+ `OllamaLLM`（本地）+ `get_llm()` 工厂函数
+- [x] **配置切换**：`.env` 设置 `LLM_PROVIDER=cloud`（默认云端）/ `local`（本地模型）即可切换
+- [x] **OpenAI 兼容 API**：OllamaLLM 通过 `openai` SDK 调用 Ollama 的 `/v1/chat/completions`，参数格式与 OpenAI 一致
+- [x] **向后兼容**：保留 `qwen_plus = llm` 别名，阶段 1-3 的 `agent/` 代码不受影响
+- [x] **单元测试**：chat() / chat_with_tools() / response_format JSON 三项测试全部通过
+- [x] **E2E 验证**：本地模型跑通完整备课流程，耗时 2 分 47 秒（云端 78s，本地 167s，零 token 成本）
+
+**前端模型切换功能（2026-06-30）**：设置页新增「AI 模型」Tab，运行期热切换 cloud/local，无需重启 AI 服务
+- [x] **LLMRegistry 注册表**：`common/llm.py` 新增 `LLMRegistry` 类替代原固定单例，支持 `switch(provider)` 运行期热切换，线程安全（threading.Lock）
+- [x] **代理对象向后兼容**：`_LLMProxy` 类所有方法转发到 `registry.get()`，7 处 `from common.llm import llm` 调用方代码零改动
+- [x] **持久化**：provider 写入 `.runtime_llm.json`，AI 服务重启后仍记住上次选择（不依赖 .env 默认值）
+- [x] **3 个 AI 服务接口**：GET/POST `/api/llm/provider`（查当前/切）、GET `/api/llm/status`（含 Ollama 探活）
+- [x] **后端 Java 转发**：`LlmProviderController` + `AiService` 3 个方法，走统一 `/api` 网关，JWT 鉴权
+- [x] **前端 UI**：设置页第 4 个 Tab「AI 模型」，当前模型卡片（连通状态 Tag）+ Radio.Group 切换器，React Query 数据加载
+- [x] **单元测试**：9 项测试全部通过（初始化/切换/幂等/非法值/持久化/重启读取/代理转发）
+- [x] **端到端验证**：登录拿 token → 网关转发 → AI 服务热切换 cloud/local 全链路通过，未带 token 返回 403
+
+**本地模型性能测试与选型（2026-06-30）**：4 套基准测试 + 选型决策，为 Agent 各环节确定最优模型 + 并发方案
+- [x] **测试一：基础速度对比**：qwen3.5:2b/4b/9b 短文本速度测试，9b 41.8 t/s、4b 67.5 t/s、2b 89.8 t/s，3 轮波动均 < 1 t/s
+- [x] **测试二：4b 并行 vs 9b 单路**：4b 2 路加速 1.96x（接近理论极限 2x），端到端 27.4 t/s vs 9b 10.2 t/s（2.69x 优势）
+- [x] **测试三：4b 多路压力测试**：1/2/3/4 路显存监控，短文本 4 路拿到 2.32x 加速，**关键发现：4 路没爆显存**（Ollama 自动复用模型权重，1 路 5013MB / 4 路 4904MB）
+- [x] **测试四：4b 长文本多路测试**：800-1000 字 5 知识点内容生成，**关键发现：长文本下加速比急剧衰减**（4 路仅 1.28x vs 短文本 2.32x），2 路是性价比拐点
+- [x] **GPU 利用率诊断（理论分析）**：纯生成 t/s 接近 4x vs 端到端 1.28x，差距来自 prompt prefill CPU 串行 + 调度器开销
+- [x] **选型决策**：
+  - 短文本任务（RAG 检索、分类）：4b 4 路（37.66 t/s 端到端）
+  - 长文本内容生成（800-1000 字）：4b 2 路（53.09 t/s 端到端）
+  - 教学设计（ReAct 决策）：9b 1 路（10.19 t/s，4b ReAct 必失败）
+  - 质检 Agent：暂停中
+- [x] **五段式内容生成最优策略**：4b 2 路拆 3+2 批并行，总耗时 ~60s（vs 1 路 ~99s 节省 40%）
+- [x] **完整技术文档**：[08-工作文档/本地模型性能测试与选型方案.md](../../08-工作文档/本地模型性能测试与选型方案.md)
+- [x] **测试产物**：4 个 JSON 数据 + 4 个运行日志 + 4 个测试脚本（全部保存在 d:\AI\ 根目录）
+
 **下一步可选方向**：
 - 浏览器端到端测试（登录后 token 透传，验证 save_lesson_to_history 成功入库）
 - 答辩演示准备（Multi-Agent 可视化是杀手锏）
-- 继续性能优化（主流程 teaching_design + content_generation ReAct + qa 串行链路占比 40s+，可考虑并发或缓存）
+- 教学设计 Agent 的 ReAct 循环耗时波动（7-21s），可考虑缓存或简化 prompt
 - 更多学科教材入库（化学/生物等，复用 unit_detector.py 的章节检测能力）
+
+---
+
+## 🆕 2026-07-01 内容生成并发数动态化重构
+
+**问题诊断**（来自 5 套对比测试脚本）：
+- [x] **测试一 `test_local_model_speed.py`**：3 模型 3 轮短文本速度基线，2b 89.8 t/s、4b 67.5 t/s、9b 41.8 t/s
+- [x] **测试二 `test_compare_configs.py`**：5 套配置对比（2b 5路/2路、4b 1路/2路、9b 1路），关键发现**2b 5路 最长段 76.1s（撞 num_predict=1600 上限）**
+- [x] **测试三 `test_realistic_compare.py`**：匹配项目实际参数 num_predict=16384 复测，2b 5路 66.4s/不均匀 3.25x vs 2b 2路 63.2s/不均匀 1.74x —— **2路 总耗时更短且稳定**
+- [x] **关键反直觉结论**：memory 中记录的"4b 2路 ~60s"是 TEST_MODE 200字场景，实测真实 800字场景 4b 2路 86.3s（不是 60s）
+
+**代码改动**（仅 2 处，约 30 行）：
+- [x] **`multi_agent/agents/content_generation.py:get_max_workers_for_model`**：2b 模型并发数 5 → 2
+- [x] **`multi_agent/agents/content_generation.py:generate_five_sections_parallel`**：从 `config.OLLAMA_MODEL` 静态导入改为 `registry.get().model` 动态感知，热切换 provider 后并发数立即更新
+- [x] **新增段级计时输出**：`[并行生成] 5 段全部完成（max_workers=N, 总耗时 Xs）`
+
+**验证结果**：
+- [x] **端到端耗时**：`test_e2e_timing.py` 圆周运动场景从 115.02s → 90.24s（提速 22%）
+- [x] **内容生成阶段**：98.68s → 61.94s（提速 37%）
+- [x] **热切换验证 `test_hot_switch_workers.py`**：4 个场景（2b/4b/9b/cloud）max_workers 全部正确（2/2/1/5）
+- [x] **`registry.switch()` 验证 `test_registry_switch.py`**：provider 切换 + 模型替换 5 个步骤全部通过
+- [x] **质量保持**：QA 准确性 88、排版 92 通过（公式 65 未通过但质检 Agent 暂停中，符合预期）
+
+**架构灵活性提升**：
+- 之前：用户从云端切到本地 2b 后，内容生成仍跑 5 路（因为查的是 config.OLLAMA_MODEL 静态值）
+- 现在：热切换后，registry.get() 返回新实例，新实例的 .model 决定 max_workers
+- 用户场景：4b 2路 慢但稳（86s） / 2b 2路 快但有质量风险（63s） / 9b 1路 最稳但慢（142s），可热切换自由选择
 
 ---
 
