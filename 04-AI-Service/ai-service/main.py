@@ -14,7 +14,7 @@ from typing import Optional, Dict, List
 import uvicorn
 import json
 from datetime import datetime
-from config import SERVICE_PORT
+from config import SERVICE_PORT, DASHSCOPE_API_KEY, OLLAMA_BASE_URL
 
 app = FastAPI(title="AI Lesson Generation Service")
 
@@ -176,7 +176,7 @@ def test_teaching_design(request: TeachingDesignTestRequest, authorization: Opti
             "qa_result": None,
             "export_result": None,
             "retry_count": 0,
-            "max_retry": 3,
+            "max_retry": 1,
             "current_node": "start",
             "status": "running",
             "agent_trace": [],
@@ -413,10 +413,11 @@ def run_multi_agent_sse(
             state["token"] = token
 
             # 编译工作流
+            # 2026-06 QA 优化期：默认走 2 节点工作流（QA 临时停用）
             if use_full_workflow:
                 app_workflow = build_lesson_plan_workflow()
             else:
-                app_workflow = build_linear_workflow()
+                app_workflow = build_teaching_and_content_workflow()
 
             # 用 stream() 同步流式执行，获取每个节点的输出
             current_state = dict(state)
@@ -515,6 +516,94 @@ def get_multi_agent_state(session_id: str):
     if state is None:
         return {"success": False, "error": "未找到会话状态", "session_id": session_id}
     return {"success": True, "state": state, "session_id": session_id}
+
+
+# ============================================================
+# LLM Provider 管理接口（运行期热切换）
+# ============================================================
+# 前端通过后端 Java 网关转发到这里，实现页面切换 LLM 无需重启 AI 服务
+from common.llm import registry, AVAILABLE_PROVIDERS
+
+class LlmProviderSwitchRequest(BaseModel):
+    provider: str  # "cloud" 或 "local"
+
+@app.get("/api/llm/provider")
+def get_llm_provider():
+    """
+    查询当前 LLM provider 及可用列表。
+
+    返回：
+        current: 当前 provider 名（cloud / local）
+        providers: 可用 provider 详情列表（供前端 UI 渲染选项）
+    """
+    return {
+        "current": registry.current_provider(),
+        "providers": AVAILABLE_PROVIDERS,
+    }
+
+@app.post("/api/llm/provider")
+def switch_llm_provider(request: LlmProviderSwitchRequest):
+    """
+    热切换 LLM provider（无需重启 AI 服务）。
+
+    切换后立即对所有后续 LLM 调用生效，并持久化到 .runtime_llm.json，
+    AI 服务重启后仍记住上次选择。
+    """
+    ok = registry.switch(request.provider)
+    if not ok:
+        raise HTTPException(
+            status_code=400,
+            detail=f"非法 provider: {request.provider}，可选值: {list(AVAILABLE_PROVIDERS.keys())}"
+        )
+    return {
+        "success": True,
+        "current": registry.current_provider(),
+        "message": f"已切换到 {AVAILABLE_PROVIDERS[request.provider]['label']}",
+    }
+
+@app.get("/api/llm/status")
+def llm_status():
+    """
+    LLM 健康状态检查（供前端展示当前模型 + 连通性）。
+
+    对当前 provider 做一次轻量探活：
+    - cloud: 不实际调用 API（避免耗 token），只返回配置就绪状态
+    - local: 探测 Ollama /api/tags 端点确认服务在线
+    """
+    current = registry.current_provider()
+    info = AVAILABLE_PROVIDERS.get(current, {})
+    reachable = True
+    detail = ""
+
+    if current == "local":
+        # 探测 Ollama 是否在线
+        import urllib.request
+        try:
+            req = urllib.request.Request(
+                f"{OLLAMA_BASE_URL.replace('/v1', '')}/api/tags",
+                method="GET"
+            )
+            with urllib.request.urlopen(req, timeout=3) as resp:
+                if resp.status == 200:
+                    detail = "Ollama 服务在线"
+                else:
+                    reachable = False
+                    detail = f"Ollama 返回非 200: {resp.status}"
+        except Exception as e:
+            reachable = False
+            detail = f"Ollama 不可达: {str(e)}"
+    else:
+        # 云端不实际调用，只检查 API key 是否配置
+        reachable = bool(DASHSCOPE_API_KEY)
+        detail = "API key 已配置" if reachable else "DASHSCOPE_API_KEY 未配置"
+
+    return {
+        "current": current,
+        "label": info.get("label", ""),
+        "description": info.get("description", ""),
+        "reachable": reachable,
+        "detail": detail,
+    }
 
 
 if __name__ == "__main__":

@@ -3,6 +3,8 @@ uvicorn==0.27.0
 pydantic==2.5.3
 dashscope==1.14.0
 python-dotenv==1.0.0
+# 本地模型 Provider（Ollama OpenAI 兼容 API）
+openai>=1.0.0
 # 阶段 2 RAG 检索增强
 pymupdf
 chromadb
