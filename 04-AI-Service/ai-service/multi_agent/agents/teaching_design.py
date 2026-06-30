@@ -16,7 +16,7 @@ import re
 from typing import Dict, Any, Optional
 from pydantic import ValidationError
 
-from common.llm import llm
+from common.llm import llm, get_agent_llm
 from config import TEST_MODE
 from multi_agent.react_loop import ReActLoop
 from multi_agent.prompts import TEACHING_DESIGN_PROMPT
@@ -379,6 +379,7 @@ def teaching_design_agent(state: Dict[str, Any]) -> Dict[str, Any]:
         max_iterations=5,  # 前 3 轮可调工具，第 4 轮强制出答案，第 5 轮兜底
         token=token,
         force_json_output=True,
+        llm=get_agent_llm("teaching_design"),  # 强制 9b（ReAct 决策需要大模型）
     )
 
     result = react.run(user_request)

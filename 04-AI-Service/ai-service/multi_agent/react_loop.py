@@ -14,7 +14,7 @@ trace 记录每一步，供前端可视化展示 Agent 思考过程。
 """
 import json
 from typing import List, Dict, Optional, Any
-from common.llm import llm
+from common.llm import llm as _default_llm
 from multi_agent.tools import execute_multi_agent_tool, extract_unit_from_text
 
 
@@ -40,6 +40,7 @@ class ReActLoop:
         token: str = None,
         force_json_output: bool = False,
         enable_thinking: bool = False,  # 是否开启 thinking 模式（仅 Ollama 生效）
+        llm: Optional[Any] = None,  # 注入的 LLM 实例（None 时用全局默认）
     ):
         self.system_prompt = system_prompt
         self.tools = tools
@@ -47,6 +48,7 @@ class ReActLoop:
         self.token = token
         self.force_json_output = force_json_output  # 最终答案阶段是否强制 JSON 输出
         self.enable_thinking = enable_thinking  # thinking 模式开关
+        self.llm = llm if llm is not None else _default_llm  # 教学设计传 9b，内容生成用默认 4b
         self.trace: List[Dict[str, Any]] = []
         self.unit_hint: Optional[int] = None  # 程序化提取的 Unit 编号（兜底用）
 
@@ -109,7 +111,7 @@ class ReActLoop:
 
             import time as _time
             _t_llm_start = _time.perf_counter()
-            response = llm.chat_with_tools(**call_kwargs)
+            response = self.llm.chat_with_tools(**call_kwargs)
             _t_llm_elapsed = _time.perf_counter() - _t_llm_start
             _has_tools = bool(response.get("tool_calls"))
             print(f"[计时] ReAct 第{i+1}轮 LLM 调用: {_t_llm_elapsed:.2f}s ({'调工具' if _has_tools else '出最终答案'}) tool_choice={'none' if i >= 1 else 'auto'}", flush=True)
