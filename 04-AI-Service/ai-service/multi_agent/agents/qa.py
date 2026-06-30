@@ -19,7 +19,7 @@ import json
 from typing import Dict, Any
 from pydantic import ValidationError
 
-from common.llm import qwen_plus
+from common.llm import llm
 from multi_agent.prompts import QA_PROMPT
 from multi_agent.schema import QaResult
 from multi_agent.agents.teaching_design import repair_common_json_errors
@@ -59,17 +59,19 @@ def llm_self_repair_qa(raw_output: str, error: str) -> Dict[str, Any]:
   }},
   "overall_pass": false,
   "issue_type": "content",
-  "retry_suggestion": "修复建议"
+  "retry_suggestion": "具体修复建议：1) 修复公式 1; 2) 修复排版 2"
 }}
 
 关键约束：
 - dimensions 必须包含 accuracy/format/formula 三个维度
-- issue_type 从 content/structure/none 中选一个
+- issue_type 从 content/none 中选一个（架构统一，不再用 structure）
 - overall_pass=true 时 issue_type 必须为 none
+- overall_pass=false 时 issue_type 必须为 content
+- retry_suggestion 在不通过时不能为空字符串
 
 请直接输出修正后的 JSON。"""
 
-    response = qwen_plus.chat(
+    response = llm.chat(
         messages=[{"role": "user", "content": repair_prompt}],
         response_format={"type": "json_object"},
         max_tokens=2048,
@@ -139,7 +141,7 @@ def qa_agent(state: Dict[str, Any]) -> Dict[str, Any]:
     teaching_design = state.get("teaching_design", {})
     content_draft = state.get("content_draft", {})
     retry_count = state.get("retry_count", 0)
-    max_retry = state.get("max_retry", 3)
+    max_retry = state.get("max_retry", 1)
 
     # 构造 prompt
     prompt = QA_PROMPT.format(
@@ -148,7 +150,7 @@ def qa_agent(state: Dict[str, Any]) -> Dict[str, Any]:
     )
 
     # 一次 LLM 调用（Function Calling 轻量模式，不走 ReAct）
-    response = qwen_plus.chat(
+    response = llm.chat(
         messages=[{"role": "user", "content": prompt}],
         response_format={"type": "json_object"},
         max_tokens=2048,

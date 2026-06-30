@@ -55,7 +55,7 @@ def create_initial_state(
     session_id: str,
     student_profile: Optional[Dict[str, Any]] = None,
     history: Optional[List[Dict[str, Any]]] = None,
-    max_retry: int = 3,
+    max_retry: int = 1,
 ) -> LessonPlanState:
     """
     创建初始 State（工作流启动时调用）。

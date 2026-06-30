@@ -11,7 +11,7 @@ import json
 from typing import Dict, Any
 from pydantic import ValidationError
 
-from common.llm import qwen_plus
+from common.llm import llm
 from multi_agent.prompts import EXPORT_PROMPT
 from multi_agent.schema import ExportResult
 from multi_agent.agents.teaching_design import repair_common_json_errors
@@ -67,7 +67,7 @@ def export_agent(state: Dict[str, Any]) -> Dict[str, Any]:
     )
 
     # 纯 LLM 调用（无工具）
-    response = qwen_plus.chat(
+    response = llm.chat(
         messages=[{"role": "user", "content": prompt}],
         response_format={"type": "json_object"},
         max_tokens=8192,
